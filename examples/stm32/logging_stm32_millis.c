@@ -21,7 +21,7 @@ static log_backend_cfg_t log_backends[] = {
     {
         .type = LOG_OUTPUT_CUSTOM,
         .driver = &log_driver_serial_stm32,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
         .config = &huart2,
         .timestamp_format = LOG_TS_ELAPSED_MS,
@@ -37,5 +37,5 @@ static log_backend_cfg_t log_backends[] = {
 void logging_setup(void) {
     log_platform_init();
     log_init(log_backends, sizeof(log_backends) / sizeof(log_backends[0]));
-    LOG_INFO("main", "logging started");
+    LOGGING_INFO("main", "logging started");
 }

@@ -37,26 +37,26 @@ static void cap_write(void *internal, const log_backend_cfg_t *cfg,
 static const log_backend_driver_t cap_driver = { "cap", NULL, NULL, cap_write };
 
 static log_backend_cfg_t g_backends[] = {
-    { .type = LOG_OUTPUT_CUSTOM, .driver = &cap_driver, .level = LOG_LEVEL_DEBUG, .enabled = true },
+    { .type = LOG_OUTPUT_CUSTOM, .driver = &cap_driver, .level = LOGGING_LEVEL_DEBUG, .enabled = true },
 };
 
 int main(void) {
     log_init(g_backends, 1);
 
     log_backend_set_timestamp_format(0, LOG_TS_ELAPSED_US);
-    LOG_INFO(NULL, "x");
+    LOGGING_INFO(NULL, "x");
     CHECK(strcmp(g_ts, "5000000000123456") == 0, "ELAPSED_US prints all 64 bits");
 
     log_backend_set_timestamp_format(0, LOG_TS_ELAPSED_SEC);
-    LOG_INFO(NULL, "x");
+    LOGGING_INFO(NULL, "x");
     CHECK(strcmp(g_ts, "5000000000.123456") == 0, "ELAPSED_SEC prints all 64 bits");
 
     log_backend_set_timestamp_format(0, LOG_TS_ELAPSED_MS);
-    LOG_INFO(NULL, "x");
+    LOGGING_INFO(NULL, "x");
     CHECK(strcmp(g_ts, "5000000000123") == 0, "ELAPSED_MS prints all 64 bits");
 
     log_backend_set_timestamp_format(0, LOG_TS_DATETIME_SHORT);
-    LOG_INFO(NULL, "x");
+    LOGGING_INFO(NULL, "x");
     CHECK(strcmp(g_ts, "5000000000.123456") == 0, "date/time format falls back to elapsed seconds");
 
     CHECK(log_lock(10) == true, "weak default log_lock is linked");

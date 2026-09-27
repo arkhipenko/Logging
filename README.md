@@ -26,8 +26,8 @@ A flexible, thread-safe logging framework for C with support for multiple simult
 
 int main(void) {
     // Works immediately - outputs to console by default
-    LOG_INFO(NULL, "Application started");
-    LOG_ERR(NULL, "Something went wrong: %d", error_code);
+    LOGGING_INFO(NULL, "Application started");
+    LOGGING_ERR(NULL, "Something went wrong: %d", error_code);
     return 0;
 }
 ```
@@ -40,12 +40,12 @@ int main(void) {
 static log_backend_cfg_t g_log_backends[] = {
     {
         .type = LOG_OUTPUT_CONSOLE,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
     },
     {
         .type = LOG_OUTPUT_FILE,
-        .level = LOG_LEVEL_WARNING,
+        .level = LOGGING_LEVEL_WARNING,
         .enabled = true,
         .config = "/var/log/myapp.log",
         .keep_open = true,
@@ -55,9 +55,9 @@ static log_backend_cfg_t g_log_backends[] = {
 int main(void) {
     log_init(g_log_backends, sizeof(g_log_backends) / sizeof(g_log_backends[0]));
 
-    LOG_INFO(NULL, "Application started");      // Console only (INFO < WARNING)
-    LOG_WARNING(NULL, "Low memory");            // Both console and file
-    LOG_ERR(NULL, "Connection failed");         // Both console and file
+    LOGGING_INFO(NULL, "Application started");      // Console only (INFO < WARNING)
+    LOGGING_WARNING(NULL, "Low memory");            // Both console and file
+    LOGGING_ERR(NULL, "Connection failed");         // Both console and file
 
     log_deinit();  // Clean up (closes files)
     return 0;
@@ -125,7 +125,7 @@ static log_backend_cfg_t backends[] = {
     {
         .type = LOG_OUTPUT_CUSTOM,
         .driver = &log_driver_serial_stm32,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
         .config = &huart2,
     },
@@ -139,7 +139,7 @@ int main(void) {
     log_platform_init();  // Creates the mutex with FreeRTOS, before the scheduler starts
     log_init(backends, 1);
 
-    LOG_INFO(NULL, "STM32 started");
+    LOGGING_INFO(NULL, "STM32 started");
     // ...
 }
 ```
@@ -153,7 +153,7 @@ static log_backend_cfg_t backends[] = {
     {
         .type = LOG_OUTPUT_CUSTOM,
         .driver = &log_driver_serial_esp32,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
         .config = (void*)UART_NUM_0,  // Default USB Serial
     },
@@ -166,7 +166,7 @@ void app_main(void) {
     log_platform_init();  // Initialize mutex
     log_init(backends, 1);
 
-    LOG_INFO(NULL, "ESP32 started");
+    LOGGING_INFO(NULL, "ESP32 started");
     // ...
 }
 ```
@@ -208,9 +208,9 @@ const log_backend_driver_t uart_driver = {
 
 // Usage
 static log_backend_cfg_t g_backends[] = {
-    { .type = LOG_OUTPUT_CONSOLE, .level = LOG_LEVEL_INFO, .enabled = true },
+    { .type = LOG_OUTPUT_CONSOLE, .level = LOGGING_LEVEL_INFO, .enabled = true },
     { .type = LOG_OUTPUT_CUSTOM, .driver = &uart_driver,
-      .level = LOG_LEVEL_DEBUG, .enabled = true, .config = &uart_cfg },
+      .level = LOGGING_LEVEL_DEBUG, .enabled = true, .config = &uart_cfg },
 };
 ```
 
@@ -248,7 +248,7 @@ Format specifications:
 
 - Arguments are taken by reference (a `String` is not copied) and keep their C++ type. A 64-bit value prints in full, even with `%d`. A missing argument prints `<?>`, an argument of the wrong kind prints `<!>`. A class other than `String` or `IPAddress` (for example `std::string`) is a compile error.
 - Levels: FATAL to CRIT, ERROR to ERR, WARNING to WARNING, NOTICE to NOTICE, TRACE to INFO, VERBOSE to DEBUG.
-- Level names: `ArduinoLog.h` defines the ArduinoLog names `LOG_LEVEL_SILENT` through `LOG_LEVEL_VERBOSE` (0-6) and hides the syslog-style names of `logging.h`, which use the same `LOG_LEVEL_*` spelling with other values. Include `ArduinoLog.h` before `logging.h` in a file that needs both; the other order stops with a compile error. NimBLE also defines `LOG_LEVEL_ERROR` (3), exactly as with ArduinoLog 1.0.3; define `LOGGING_ARDUINOLOG_PREFIXED_ONLY` to keep only the `ARDUINO_LOG_LEVEL_*` names and avoid that overlap.
+- Level names: `ArduinoLog.h` defines the ArduinoLog names `LOG_LEVEL_SILENT` through `LOG_LEVEL_VERBOSE` (0-6). `logging.h` and `ArduinoLog.h` can be included in any order. `logging_short.h` cannot share a file with `ArduinoLog.h` (same `LOG_LEVEL_*` spelling, other values): either order stops with a compile error. NimBLE also defines `LOG_LEVEL_ERROR` (3), exactly as with ArduinoLog 1.0.3; define `LOGGING_ARDUINOLOG_PREFIXED_ONLY` to keep only the `ARDUINO_LOG_LEVEL_*` names and avoid that overlap.
 - Output layout (as ArduinoLog): prefix callback, `N: `, message, newline, suffix callback. One trailing CR in the message is removed, so every call is one line.
 - `Log.begin()` installs one backend (`log_driver_arduino_print`) unless `log_init()` was called before. Then it only sets the level and the output settings. `log_driver_arduino_print` can also be used in your own backend array with a `log_arduino_print_cfg_t` (layout `LOG_ARDUINO_LAYOUT_ARDUINOLOG` or `LOG_ARDUINO_LAYOUT_STANDARD`).
 - Code size, measured with the ESP32 compiler on 20 typical calls: about 45 bytes per call site at `-Og` and 43 at `-Os` (ArduinoLog: 54 and 49). The library itself adds about 8-10 KB of fixed code (ArduinoLog: about 1.5 KB).
@@ -280,14 +280,14 @@ The framework supports multiple timestamp formats, configurable globally or per-
 static log_backend_cfg_t g_backends[] = {
     {
         .type = LOG_OUTPUT_CONSOLE,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
         .timestamp_format = LOG_TS_TIME_ONLY,    // Short format for console
         .file_line_mode = LOG_FILE_LINE_OFF,
     },
     {
         .type = LOG_OUTPUT_FILE,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
         .config = "/var/log/myapp.log",
         .timestamp_format = LOG_TS_DATETIME,     // Full format for file
@@ -316,18 +316,45 @@ The formatter must write a terminated string. `log_set_timestamp_formatter(NULL)
 
 ## Log Levels
 
-Syslog-compatible levels (lower number = higher severity). The canonical names are `LOGGING_LEVEL_EMERG` through `LOGGING_LEVEL_DEBUG` (and `LOGGING_LEVEL_NONE`). `logging.h` also provides the short names `LOG_LEVEL_EMERG` ... `LOG_LEVEL_DEBUG` and the `LOG_EMERG()` ... `LOG_DEBUG()` macros, unless `LOGGING_NO_SHORT_NAMES` is defined (`ArduinoLog.h` defines it):
+Syslog-compatible levels (lower number = higher severity). `logging.h` defines only prefixed names:
 
-| Level | Value | Macro | Description |
-|-------|-------|-------|-------------|
-| EMERG | 0 | `LOG_EMERG()` | System unusable |
-| ALERT | 1 | `LOG_ALERT()` | Immediate action required |
-| CRIT | 2 | `LOG_CRIT()` | Critical conditions |
-| ERR | 3 | `LOG_ERR()` | Error conditions |
-| WARNING | 4 | `LOG_WARNING()` | Warning conditions |
-| NOTICE | 5 | `LOG_NOTICE()` | Normal but significant |
-| INFO | 6 | `LOG_INFO()` | Informational |
-| DEBUG | 7 | `LOG_DEBUG()` | Debug messages |
+| Level | Value | Level name | Macro | Description |
+|-------|-------|------------|-------|-------------|
+| NONE | -1 | `LOGGING_LEVEL_NONE` | | Backend accepts nothing |
+| EMERG | 0 | `LOGGING_LEVEL_EMERG` | `LOGGING_EMERG()` | System unusable |
+| ALERT | 1 | `LOGGING_LEVEL_ALERT` | `LOGGING_ALERT()` | Immediate action required |
+| CRIT | 2 | `LOGGING_LEVEL_CRIT` | `LOGGING_CRIT()` | Critical conditions |
+| ERR | 3 | `LOGGING_LEVEL_ERR` | `LOGGING_ERR()` | Error conditions |
+| WARNING | 4 | `LOGGING_LEVEL_WARNING` | `LOGGING_WARNING()` | Warning conditions |
+| NOTICE | 5 | `LOGGING_LEVEL_NOTICE` | `LOGGING_NOTICE()` | Normal but significant |
+| INFO | 6 | `LOGGING_LEVEL_INFO` | `LOGGING_INFO()` | Informational |
+| DEBUG | 7 | `LOGGING_LEVEL_DEBUG` | `LOGGING_DEBUG()` | Debug messages |
+
+`LOGGING_LEVEL_MAX` equals `LOGGING_LEVEL_DEBUG`.
+
+### Short Names (`logging_short.h`)
+
+Other libraries use the short spellings with other values. NimBLE (ESP-IDF `log_common.h`) defines `LOG_LEVEL_DEBUG` 0, `LOG_LEVEL_INFO` 1, `LOG_LEVEL_NONE` 5 and `LOG_LEVEL_MAX` 15. `<syslog.h>` and lwIP (`pppdebug.h`) define `LOG_ERR`, `LOG_INFO` and others as numbers. ArduinoLog uses `LOG_LEVEL_SILENT` .. `LOG_LEVEL_VERBOSE` (0-6). When two headers define the same macro, the last one wins and gcc only warns. So `logging.h` keeps out of that namespace.
+
+For the short names, include `logging_short.h` instead of `logging.h`, in the files that want them:
+
+```c
+#include "logging_short.h"   // logging.h plus LOG_LEVEL_* and LOG_EMERG() .. LOG_DEBUG()
+
+static log_backend_cfg_t backends[] = {
+    { .type = LOG_OUTPUT_CONSOLE, .level = LOG_LEVEL_DEBUG, .enabled = true },
+};
+...
+LOG_INFO("app", "started");
+```
+
+- A file that also sees NimBLE, `ArduinoLog.h` or `<syslog.h>` uses the `LOGGING_*` names instead.
+- `logging_short.h` stops with `#error` when one of its names is already defined by a header included before it. A header included after it can still redefine them: gcc then warns `"LOG_LEVEL_DEBUG" redefined`, and that warning is the only sign.
+- Your own prefix: copy `logging_short.h`, replace every `LOG_` with your prefix (for example `APP_`, giving `APP_LEVEL_DEBUG` and `APP_INFO()`), and include the copy. Nothing else needs to change. The copy can share a file with NimBLE, `<syslog.h>` and `logging_short.h`.
+
+### Upgrading from 2.x
+
+3.0.0 removed the short names from `logging.h`. In each file that uses `LOG_LEVEL_*` or `LOG_INFO()` and the others, either include `logging_short.h` instead of `logging.h`, or rename to `LOGGING_LEVEL_*` and `LOGGING_INFO()`. `LOGGING_NO_SHORT_NAMES` no longer exists; defining it has no effect.
 
 ## API Reference
 
@@ -387,14 +414,15 @@ log_timestamp_type_t log_get_timestamp_format(void);
 ### Logging Macros
 
 ```c
-LOG_EMERG(tag, fmt, ...)
-LOG_ALERT(tag, fmt, ...)
-LOG_CRIT(tag, fmt, ...)
-LOG_ERR(tag, fmt, ...)
-LOG_WARNING(tag, fmt, ...)
-LOG_NOTICE(tag, fmt, ...)
-LOG_INFO(tag, fmt, ...)
-LOG_DEBUG(tag, fmt, ...)
+// logging_short.h adds LOG_EMERG() .. LOG_DEBUG() with the same arguments
+LOGGING_EMERG(tag, fmt, ...)
+LOGGING_ALERT(tag, fmt, ...)
+LOGGING_CRIT(tag, fmt, ...)
+LOGGING_ERR(tag, fmt, ...)
+LOGGING_WARNING(tag, fmt, ...)
+LOGGING_NOTICE(tag, fmt, ...)
+LOGGING_INFO(tag, fmt, ...)
+LOGGING_DEBUG(tag, fmt, ...)
 ```
 
 `log_write()` (behind the macros) carries the printf format attribute on GCC and Clang, so format strings are checked at compile time. `log_write_cb()` logs a message produced by your own formatter callback, which runs under the lock and writes straight into the message buffer.
@@ -447,14 +475,14 @@ static char g_log_file_path[256];
 static log_backend_cfg_t g_log_backends[] = {
     {
         .type = LOG_OUTPUT_CONSOLE,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
         .timestamp_format = LOG_TS_TIME_ONLY,
         .file_line_mode = LOG_FILE_LINE_OFF,
     },
     {
         .type = LOG_OUTPUT_FILE,
-        .level = LOG_LEVEL_DEBUG,
+        .level = LOGGING_LEVEL_DEBUG,
         .enabled = true,
         .config = g_log_file_path,
         .timestamp_format = LOG_TS_DATETIME,
@@ -480,7 +508,7 @@ int main(int argc, char *argv[]) {
     init_log_path(argv[0]);
     log_init(g_log_backends, sizeof(g_log_backends) / sizeof(g_log_backends[0]));
 
-    LOG_INFO("main", "Application started");
+    LOGGING_INFO("main", "Application started");
     // Console: [13:56:44.149] INFO   [main] Application started
     // File:    [2026-09-26 13:56:44.149] INFO   [main] [main.c:42] Application started
 
@@ -528,9 +556,6 @@ Define these as compiler flags, so that the library sources and your code see th
 
 // Stack buffer for a call that proceeds after a lock timeout (default: 128)
 #define LOGGING_UNLOCKED_BUFFER_SIZE 128
-
-// Hide the short names LOG_LEVEL_* and LOG_EMERG()..LOG_DEBUG() of logging.h
-#define LOGGING_NO_SHORT_NAMES
 
 // ArduinoLog.h: define only ARDUINO_LOG_LEVEL_*, not LOG_LEVEL_SILENT..VERBOSE
 #define LOGGING_ARDUINOLOG_PREFIXED_ONLY
@@ -594,7 +619,8 @@ tests/stack/run.sh                                  # ESP32 stack budget (Platfo
 ```
 Logging/
 +-- src/
-|   +-- logging.h           # Public API
+|   +-- logging.h           # Public API (LOGGING_* names only)
+|   +-- logging_short.h     # Optional short names LOG_LEVEL_*, LOG_INFO() ...
 |   +-- logging_internal.h  # Internal structures, driver helpers
 |   +-- logging_platform.h  # Platform selection
 |   +-- logging_core.c      # Core implementation

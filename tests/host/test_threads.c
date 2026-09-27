@@ -24,7 +24,7 @@ static int g_failures = 0;
     } while (0)
 
 static log_backend_cfg_t g_backends[] = {
-    { .type = LOG_OUTPUT_FILE, .level = LOG_LEVEL_DEBUG, .enabled = true,
+    { .type = LOG_OUTPUT_FILE, .level = LOGGING_LEVEL_DEBUG, .enabled = true,
       .config = "test_threads.log", .keep_open = true, .timestamp_format = LOG_TS_ELAPSED_US },
 };
 
@@ -33,7 +33,7 @@ static atomic_int g_stop;
 static void *writer(void *arg) {
     (void)arg;
     while (!atomic_load(&g_stop)) {
-        LOG_INFO("w", "line");
+        LOGGING_INFO("w", "line");
     }
     return NULL;
 }

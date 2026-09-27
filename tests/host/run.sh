@@ -42,7 +42,7 @@ $CC $CFLAGS -o t_archive "$HERE/test_logging.c" -L. -llogging -lpthread && run a
 echo "== default output, no -D flags (wall clock) =="
 cat > default.c <<'C'
 #include "logging.h"
-int main(void) { LOG_INFO("app", "default format"); return 0; }
+int main(void) { LOGGING_INFO("app", "default format"); return 0; }
 C
 $CC $CFLAGS -o t_default default.c -L. -llogging -lpthread && ./t_default > default.out
 if grep -qE '^\[[0-9]{2}/[0-9]{2}/[0-9]{2}-[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}\] INFO   \[app\] default format$' default.out; then
@@ -92,7 +92,7 @@ else
     fail "unsupported argument type not rejected"
 fi
 
-echo "== level names (ArduinoLog, NimBLE, syslog short names) =="
+echo "== level names (ArduinoLog.h, NimBLE) =="
 NAMES="-std=gnu++11 -Wall -Wextra -DARDUINO=100 -I$HERE/fake_arduino -I$SRC -I$HERE"
 $CXX $NAMES $SAN -DLOG_LEVEL=LOG_LEVEL_VERBOSE -o t_dti "$HERE/test_dti_compat.cpp" "$SRC/ArduinoLog.cpp" san_*.o -lpthread \
     && run dti ./t_dti || fail "DTI pattern build"
@@ -108,14 +108,71 @@ for f in nimble_first nimble_last; do
     w=$(grep -c 'redefined' $f.err); we=$(grep 'redefined' $f.err | grep -c 'LOG_LEVEL_ERROR')
     if [ "$w" -eq 1 ] && [ "$we" -eq 1 ]; then pass "$f: only LOG_LEVEL_ERROR overlaps (as with ArduinoLog 1.0.3)"; else fail "$f: $w redefinitions"; grep redefined $f.err | head -5; fi
 done
-printf '#include <logging.h>\n#include <ArduinoLog.h>\n' > syslog_first.cpp
-if ! $CXX $NAMES -c syslog_first.cpp -o syslog_first.o 2> syslog_first.err && grep -q 'short level names are already defined' syslog_first.err; then
-    pass "logging.h before ArduinoLog.h stops with a clear #error"
-else
-    fail "logging.h before ArduinoLog.h not rejected"
-fi
-printf '#include <logging.h>\nint f(void) { return LOGGING_LEVEL_INFO; }\n#ifdef LOG_INFO\n#error short names present\n#endif\n' > noshort.c
-$CC $CFLAGS -DLOGGING_NO_SHORT_NAMES -c noshort.c -o noshort.o && pass "LOGGING_NO_SHORT_NAMES hides the short names" || fail "LOGGING_NO_SHORT_NAMES"
+expect_error() { # name, message part, compiler and flags...
+    local name=$1 msg=$2; shift 2
+    if ! "$@" -c $name -o /dev/null 2> $name.err && grep -q "$msg" $name.err; then return 0; fi
+    head -5 $name.err; return 1
+}
+for order in "logging.h ArduinoLog.h" "ArduinoLog.h logging.h"; do
+    set -- $order
+    printf '#include <%s>\n#include <%s>\nint f(void) { return LOGGING_LEVEL_DEBUG + LOG_LEVEL_VERBOSE; }\n' $1 $2 > al_order.cpp
+    $CXX $NAMES -Werror -c al_order.cpp -o al_order.o && pass "$1 then $2: no warning" || fail "$1 then $2"
+done
+printf '#include <logging_short.h>\n#include <ArduinoLog.h>\n' > short_then_al.cpp
+expect_error short_then_al.cpp 'logging_short.h is already included' $CXX $NAMES \
+    && pass "logging_short.h before ArduinoLog.h stops with a clear #error" || fail "logging_short.h before ArduinoLog.h not rejected"
+printf '#include <ArduinoLog.h>\n#include <logging_short.h>\n' > al_then_short.cpp
+expect_error al_then_short.cpp 'a LOG_LEVEL_\* name is already defined' $CXX $NAMES \
+    && pass "ArduinoLog.h before logging_short.h stops with a clear #error" || fail "ArduinoLog.h before logging_short.h not rejected"
+
+echo "== level names (logging.h, logging_short.h, NimBLE, syslog.h) =="
+printf '#include <logging.h>\n#if defined(LOG_INFO) || defined(LOG_LEVEL_INFO) || defined(LOG_LEVEL_EMERG)\n#error short names present\n#endif\nint f(void) { return LOGGING_LEVEL_INFO; }\n' > noshort.c
+$CC $CFLAGS -c noshort.c -o noshort.o && pass "logging.h defines no short names" || fail "logging.h defines short names"
+for order in "logging.h nimble_like.h" "nimble_like.h logging.h"; do
+    set -- $order
+    printf '#include "%s"\n#include "%s"\n_Static_assert(LOGGING_LEVEL_DEBUG == 7 && LOG_LEVEL_DEBUG == 0 && LOG_LEVEL_NONE == 5, "values");\nvoid f(void) { LOGGING_DEBUG("t", "x %%d", 1); }\n' $1 $2 > nimble_c.c
+    $CC $CFLAGS -I$HERE -c nimble_c.c -o nimble_c.o && pass "$1 then $2: no warning, both value sets intact" || fail "$1 then $2"
+done
+for order in "logging.h syslog.h" "syslog.h logging.h"; do
+    set -- $order
+    printf '#include <%s>\n#include <%s>\n_Static_assert(LOGGING_LEVEL_ERR == 3 && LOG_ERR == 3, "values");\nvoid f(void) { LOGGING_ERR("t", "x %%d", 1); }\n' $1 $2 > syslog_c.c
+    $CC $CFLAGS -c syslog_c.c -o syslog_c.o && pass "$1 then $2: LOGGING_ERR() works next to the syslog LOG_ERR" || fail "$1 then $2"
+done
+printf '#include "nimble_like.h"\n#include "logging_short.h"\n' > nimble_then_short.c
+expect_error nimble_then_short.c 'a LOG_LEVEL_\* name is already defined' $CC $CFLAGS -I$HERE \
+    && pass "NimBLE before logging_short.h stops with a clear #error" || fail "NimBLE before logging_short.h not rejected"
+printf '#include <syslog.h>\n#include "logging_short.h"\n' > syslog_then_short.c
+expect_error syslog_then_short.c 'a LOG_EMERG .. LOG_DEBUG name is already defined' $CC $CFLAGS \
+    && pass "syslog.h before logging_short.h stops with a clear #error" || fail "syslog.h before logging_short.h not rejected"
+cat > short.c <<'C'
+#include "logging_short.h"
+_Static_assert(LOG_LEVEL_NONE == -1 && LOG_LEVEL_EMERG == 0 && LOG_LEVEL_ERR == 3 && LOG_LEVEL_DEBUG == 7 && LOG_LEVEL_MAX == 7, "short level values");
+static log_backend_cfg_t be[] = { { .type = LOG_OUTPUT_CONSOLE, .level = LOG_LEVEL_INFO, .enabled = true, .timestamp_format = LOG_TS_NONE } };
+int main(void) {
+    log_init(be, 1);
+    LOG_EMERG("s", "e%d", 0); LOG_ALERT("s", "a"); LOG_CRIT("s", "c"); LOG_ERR("s", "r");
+    LOG_WARNING("s", "w"); LOG_NOTICE("s", "n"); LOG_INFO("s", "i%s", "!"); LOG_DEBUG("s", "filtered");
+    log_deinit();
+    return 0;
+}
+C
+printf 'EMERG  [s] e0\nALERT  [s] a\nCRIT   [s] c\nERR    [s] r\nWARN   [s] w\nNOTICE [s] n\nINFO   [s] i!\n' > short.expected
+$CC $CFLAGS -o t_short short.c -L. -llogging -lpthread && ./t_short > short.out && cmp -s short.out short.expected \
+    && pass "logging_short.h: all eight LOG_*() calls and LOG_LEVEL_* filter" || { fail "logging_short.h output"; cat -v short.out; }
+$CC $CFLAGS -DLOGGING_DISABLE_LOGGING -c short.c -o short_disabled.o && pass "logging_short.h with LOGGING_DISABLE_LOGGING" || fail "logging_short.h disabled build"
+sed 's/LOG_/APP_/g' "$SRC/logging_short.h" > app_log.h
+grep -q 'LOG_' app_log.h && fail "renamed copy still contains LOG_" || pass "renamed copy contains no LOG_ name"
+cat > app_prefix.c <<'C'
+#include <syslog.h>
+#include "app_log.h"
+#include "nimble_like.h"
+_Static_assert(APP_LEVEL_DEBUG == 7 && LOG_LEVEL_DEBUG == 0 && LOG_ERR == 3, "values");
+int main(void) { APP_INFO("app", "renamed copy %d", APP_LEVEL_DEBUG); return 0; }
+C
+$CC $CFLAGS -I$HERE -o t_app app_prefix.c -L. -llogging -lpthread && ./t_app | grep -q 'INFO   \[app\] renamed copy 7$' \
+    && pass "copy of logging_short.h with LOG_ -> APP_: works next to syslog.h and NimBLE" || fail "renamed copy"
+printf '#include "logging_short.h"\n#include "app_log.h"\nint f(void) { LOG_INFO("t", "x"); APP_INFO("t", "y"); return LOG_LEVEL_INFO + APP_LEVEL_INFO; }\n' > both_copies.c
+$CC $CFLAGS -c both_copies.c -o both_copies.o && pass "logging_short.h and a renamed copy in one file" || fail "logging_short.h and a renamed copy in one file"
 
 echo "== threads under AddressSanitizer =="
 $CC $CFLAGS -fsanitize=address -o t_threads "$HERE/test_threads.c" $LIB_SRCS -lpthread && run threads ./t_threads || fail "threads build or run"
@@ -127,8 +184,10 @@ echo "== compile checks =="
 $CC $CFLAGS -DLOGGING_DISABLE_LOGGING -o t_disabled default.c $LIB_SRCS -lpthread && pass "LOGGING_DISABLE_LOGGING builds" || fail "LOGGING_DISABLE_LOGGING build"
 $CC $CFLAGS -DLOGGING_ENABLE_FILE_LINE -o t_fileline default.c $LIB_SRCS -lpthread && ./t_fileline | grep -q '\[app\] \[default.c:2\] default format' \
     && pass "LOGGING_ENABLE_FILE_LINE prints tag and file:line" || fail "LOGGING_ENABLE_FILE_LINE output"
-printf '#include "logging.h"\nint main() { LOG_INFO("cpp", "x %%d", 1); return 0; }\n' > cpp.cpp
+printf '#include "logging.h"\nint main() { LOGGING_INFO("cpp", "x %%d", 1); return 0; }\n' > cpp.cpp
 ${CXX:-g++} -Wall -Wextra -Werror -I$SRC -c cpp.cpp -o cpp.o && pass "header compiles as C++" || fail "C++ header compile"
+printf '#include "logging_short.h"\nint main() { LOG_INFO("cpp", "x %%d", 1); return LOG_LEVEL_INFO; }\n' > cpp_short.cpp
+${CXX:-g++} -Wall -Wextra -Werror -I$SRC -c cpp_short.cpp -o cpp_short.o && pass "logging_short.h compiles as C++" || fail "logging_short.h C++ compile"
 
 echo
 if grep -h '^FAIL' ./*.out >/dev/null 2>&1 || [ $FAIL -ne 0 ]; then echo "HOST TESTS FAILED"; exit 1; fi

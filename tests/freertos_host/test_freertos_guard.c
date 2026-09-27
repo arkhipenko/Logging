@@ -50,7 +50,7 @@ static void cap_write(void *internal, const log_backend_cfg_t *cfg,
     g_lines++;
     if (strstr(message, "recurse")) {
         g_nested_attempts++;
-        LOG_ERR("nested", "must be dropped");
+        LOGGING_ERR("nested", "must be dropped");
     }
     if ((g_lines % 5) == 0) {
         vTaskDelay(1);   // hold the mutex so other tasks queue inside the library
@@ -58,7 +58,7 @@ static void cap_write(void *internal, const log_backend_cfg_t *cfg,
 }
 static const log_backend_driver_t cap_driver = { "cap", NULL, NULL, cap_write };
 static log_backend_cfg_t g_backends[] = {
-    { .type = LOG_OUTPUT_CUSTOM, .driver = &cap_driver, .level = LOG_LEVEL_DEBUG,
+    { .type = LOG_OUTPUT_CUSTOM, .driver = &cap_driver, .level = LOGGING_LEVEL_DEBUG,
       .enabled = true, .timestamp_format = LOG_TS_ELAPSED_MS },
 };
 
@@ -67,7 +67,7 @@ static volatile int g_done = 0;
 static void worker(void *arg) {
     int id = (int)(intptr_t)arg;
     for (int i = 0; i < MESSAGES; i++) {
-        LOG_INFO("w", "task %d message %d", id, i);
+        LOGGING_INFO("w", "task %d message %d", id, i);
     }
     g_done++;
     vTaskDelete(NULL);
@@ -79,7 +79,7 @@ static void monitor(void *arg) {
         vTaskDelay(10);
     }
     int before = g_lines;
-    LOG_INFO("m", "recurse once");
+    LOGGING_INFO("m", "recurse once");
     int ok = 1;
     int expected = 1 + TASKS * MESSAGES;   // pre-scheduler line plus workers
 #if EXPECT_ALL
@@ -102,7 +102,7 @@ static void monitor(void *arg) {
 int main(void) {
     log_platform_init();
     log_init(g_backends, 1);
-    LOG_INFO("main", "before the scheduler");
+    LOGGING_INFO("main", "before the scheduler");
 
     for (int i = 0; i < TASKS; i++) {
         xTaskCreate(worker, "w", configMINIMAL_STACK_SIZE, (void *)(intptr_t)i, 1 + (i % 3), NULL);

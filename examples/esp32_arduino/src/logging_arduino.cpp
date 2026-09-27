@@ -92,7 +92,7 @@ static void log_serial_arduino_write(void *internal, const log_backend_cfg_t *cf
  *       {
  *           .type = LOG_OUTPUT_CUSTOM,
  *           .driver = &log_driver_serial_arduino,
- *           .level = LOG_LEVEL_DEBUG,
+ *           .level = LOGGING_LEVEL_DEBUG,
  *           .enabled = true,
  *           .config = NULL,  // Use Serial (USB)
  *       },

@@ -53,8 +53,9 @@ extern "C" {
 //  Log Levels (Syslog Compatible)
 // *************************************************************************
 
-// Canonical names, used by the library itself. They cannot collide with
-// other libraries (NimBLE and ArduinoLog also define LOG_LEVEL_* names).
+// Only prefixed names here: NimBLE, ArduinoLog and <syslog.h> define
+// LOG_LEVEL_* and LOG_ERR-style names with other values. The short names
+// LOG_LEVEL_* and LOG_EMERG() .. LOG_DEBUG() are in logging_short.h.
 #define LOGGING_LEVEL_NONE     (-1) // Disable output for this subscriber
 #define LOGGING_LEVEL_EMERG    0    // System unusable
 #define LOGGING_LEVEL_ALERT    1    // Action must be taken immediately
@@ -65,21 +66,6 @@ extern "C" {
 #define LOGGING_LEVEL_INFO     6    // Informational
 #define LOGGING_LEVEL_DEBUG    7    // Debug-level messages
 #define LOGGING_LEVEL_MAX      LOGGING_LEVEL_DEBUG
-
-// Short names, unless LOGGING_NO_SHORT_NAMES is defined (ArduinoLog.h
-// defines it, because it uses LOG_LEVEL_* names with ArduinoLog values)
-#ifndef LOGGING_NO_SHORT_NAMES
-#define LOG_LEVEL_NONE     LOGGING_LEVEL_NONE
-#define LOG_LEVEL_EMERG    LOGGING_LEVEL_EMERG
-#define LOG_LEVEL_ALERT    LOGGING_LEVEL_ALERT
-#define LOG_LEVEL_CRIT     LOGGING_LEVEL_CRIT
-#define LOG_LEVEL_ERR      LOGGING_LEVEL_ERR
-#define LOG_LEVEL_WARNING  LOGGING_LEVEL_WARNING
-#define LOG_LEVEL_NOTICE   LOGGING_LEVEL_NOTICE
-#define LOG_LEVEL_INFO     LOGGING_LEVEL_INFO
-#define LOG_LEVEL_DEBUG    LOGGING_LEVEL_DEBUG
-#define LOG_LEVEL_MAX      LOGGING_LEVEL_MAX
-#endif
 
 // *************************************************************************
 //  Backend Types
@@ -518,7 +504,7 @@ void log_write_cb(unsigned int level, const char *tag, const char *file,
                   int line, log_message_formatter_t formatter, void *context);
 
 // *************************************************************************
-//  Logging Macros (short names, unless LOGGING_NO_SHORT_NAMES is defined)
+//  Logging Macros (short names LOG_EMERG() .. LOG_DEBUG(): logging_short.h)
 // *************************************************************************
 
 #ifdef LOGGING_ENABLE_FILE_LINE
@@ -527,28 +513,26 @@ void log_write_cb(unsigned int level, const char *tag, const char *file,
     #define LOGGING_WHERE NULL, 0
 #endif
 
-#ifndef LOGGING_NO_SHORT_NAMES
 #ifndef LOGGING_DISABLE_LOGGING
-    #define LOG_EMERG(tag, fmt, ...)   log_write(LOGGING_LEVEL_EMERG, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOG_ALERT(tag, fmt, ...)   log_write(LOGGING_LEVEL_ALERT, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOG_CRIT(tag, fmt, ...)    log_write(LOGGING_LEVEL_CRIT, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOG_ERR(tag, fmt, ...)     log_write(LOGGING_LEVEL_ERR, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOG_WARNING(tag, fmt, ...) log_write(LOGGING_LEVEL_WARNING, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOG_NOTICE(tag, fmt, ...)  log_write(LOGGING_LEVEL_NOTICE, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOG_INFO(tag, fmt, ...)    log_write(LOGGING_LEVEL_INFO, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOG_DEBUG(tag, fmt, ...)   log_write(LOGGING_LEVEL_DEBUG, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_EMERG(tag, fmt, ...)   log_write(LOGGING_LEVEL_EMERG, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_ALERT(tag, fmt, ...)   log_write(LOGGING_LEVEL_ALERT, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_CRIT(tag, fmt, ...)    log_write(LOGGING_LEVEL_CRIT, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_ERR(tag, fmt, ...)     log_write(LOGGING_LEVEL_ERR, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_WARNING(tag, fmt, ...) log_write(LOGGING_LEVEL_WARNING, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_NOTICE(tag, fmt, ...)  log_write(LOGGING_LEVEL_NOTICE, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_INFO(tag, fmt, ...)    log_write(LOGGING_LEVEL_INFO, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    #define LOGGING_DEBUG(tag, fmt, ...)   log_write(LOGGING_LEVEL_DEBUG, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
 #else
     // Logging disabled - all macros become no-ops
-    #define LOG_EMERG(tag, fmt, ...)   ((void)0)
-    #define LOG_ALERT(tag, fmt, ...)   ((void)0)
-    #define LOG_CRIT(tag, fmt, ...)    ((void)0)
-    #define LOG_ERR(tag, fmt, ...)     ((void)0)
-    #define LOG_WARNING(tag, fmt, ...) ((void)0)
-    #define LOG_NOTICE(tag, fmt, ...)  ((void)0)
-    #define LOG_INFO(tag, fmt, ...)    ((void)0)
-    #define LOG_DEBUG(tag, fmt, ...)   ((void)0)
+    #define LOGGING_EMERG(tag, fmt, ...)   ((void)0)
+    #define LOGGING_ALERT(tag, fmt, ...)   ((void)0)
+    #define LOGGING_CRIT(tag, fmt, ...)    ((void)0)
+    #define LOGGING_ERR(tag, fmt, ...)     ((void)0)
+    #define LOGGING_WARNING(tag, fmt, ...) ((void)0)
+    #define LOGGING_NOTICE(tag, fmt, ...)  ((void)0)
+    #define LOGGING_INFO(tag, fmt, ...)    ((void)0)
+    #define LOGGING_DEBUG(tag, fmt, ...)   ((void)0)
 #endif
-#endif // LOGGING_NO_SHORT_NAMES
 
 #ifdef __cplusplus
 }

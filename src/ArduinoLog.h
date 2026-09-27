@@ -31,12 +31,10 @@
 #endif
 
 // The ArduinoLog level names below reuse LOG_LEVEL_* with ArduinoLog values,
-// so the syslog short names of logging.h must stay hidden in this file.
+// so the syslog-style short names of logging_short.h cannot share a file
+// with them. logging.h itself defines only LOGGING_* names.
 #if defined(LOG_LEVEL_EMERG)
-#error "ArduinoLog.h: logging.h short level names are already defined here. Include ArduinoLog.h before logging.h, or define LOGGING_NO_SHORT_NAMES as a global build flag."
-#endif
-#ifndef LOGGING_NO_SHORT_NAMES
-#define LOGGING_NO_SHORT_NAMES
+#error "ArduinoLog.h: logging_short.h is already included here. Its LOG_LEVEL_* names have other values than ArduinoLog's: use the LOGGING_* names of logging.h in this file."
 #endif
 
 #include "logging.h"

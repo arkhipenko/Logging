@@ -56,7 +56,7 @@ static void rec_write(void *internal, const log_backend_cfg_t *cfg,
     (void)internal; (void)cfg; (void)level; (void)tag; (void)file; (void)line;
     (void)timestamp_str; (void)message;
     g_rec_calls++;
-    LOG_ERR("rec", "nested call must be dropped");
+    LOGGING_ERR("rec", "nested call must be dropped");
     log_backend_set_file_line_mode(0, LOG_FILE_LINE_OFF);
 }
 static const log_backend_driver_t rec_driver = { "rec", NULL, NULL, rec_write };
@@ -111,7 +111,7 @@ static int fmt_no_terminator(uint64_t t, char *buf, size_t size) {
 // *************************************************************************
 
 static log_backend_cfg_t g_cap_backends[] = {
-    { .type = LOG_OUTPUT_CUSTOM, .driver = &cap_driver, .level = LOG_LEVEL_INFO,
+    { .type = LOG_OUTPUT_CUSTOM, .driver = &cap_driver, .level = LOGGING_LEVEL_INFO,
       .enabled = true, .timestamp_format = LOG_TS_NONE },
 };
 
@@ -119,15 +119,15 @@ static void test_filter_and_layout(void) {
     log_init(g_cap_backends, 1);
 
     g_count = 0;
-    LOG_DEBUG("t", "filtered");
+    LOGGING_DEBUG("t", "filtered");
     CHECK(g_count == 0, "level filter drops DEBUG at INFO");
 
-    LOG_INFO("t", "hello %d", 1);
+    LOGGING_INFO("t", "hello %d", 1);
     CHECK(strcmp(g_line, "INFO   [t] hello 1\n") == 0, "layout with tag");
 
-    log_backend_set_level(0, LOG_LEVEL_DEBUG);
+    log_backend_set_level(0, LOGGING_LEVEL_DEBUG);
     g_count = 0;
-    LOG_DEBUG("t", "now visible");
+    LOGGING_DEBUG("t", "now visible");
     CHECK(g_count == 1, "log_backend_set_level raises the fast filter");
 
     g_count = 0;
@@ -136,13 +136,13 @@ static void test_filter_and_layout(void) {
     CHECK(g_count == 0, "out-of-range levels are not accepted");
 
     log_backend_set_file_line_mode(0, LOG_FILE_LINE_ON);
-    log_write(LOG_LEVEL_INFO, "tag", "/a/b/main.c", 42, "x");
+    log_write(LOGGING_LEVEL_INFO, "tag", "/a/b/main.c", 42, "x");
     CHECK(strcmp(g_line, "INFO   [tag] [main.c:42] x\n") == 0, "tag and file:line both printed");
-    log_write(LOG_LEVEL_INFO, NULL, "C:\\src\\net.c", 7, "y");
+    log_write(LOGGING_LEVEL_INFO, NULL, "C:\\src\\net.c", 7, "y");
     CHECK(strcmp(g_line, "INFO   [net.c:7] y\n") == 0, "file:line without tag, backslash path");
     log_backend_set_file_line_mode(0, LOG_FILE_LINE_OFF);
 
-    log_write(LOG_LEVEL_INFO, NULL, NULL, 0, NULL);
+    log_write(LOGGING_LEVEL_INFO, NULL, NULL, 0, NULL);
     CHECK(strcmp(g_line, "INFO   (null format)\n") == 0, "NULL format does not crash");
 
     log_deinit();
@@ -153,27 +153,27 @@ static void test_timestamps(void) {
     log_init(g_cap_backends, 1);
 
     log_backend_set_timestamp_format(0, LOG_TS_ELAPSED_US);
-    LOG_INFO(NULL, "us");
+    LOGGING_INFO(NULL, "us");
     first_bracket(g_line, ts, sizeof(ts));
     CHECK(ts[0] != '\0' && strcmp(ts, "0") != 0, "ELAPSED_US is non-zero (port hook linked)");
 
     log_backend_set_timestamp_format(0, LOG_TS_DATETIME_SHORT);
-    LOG_INFO(NULL, "short");
+    LOGGING_INFO(NULL, "short");
     first_bracket(g_line, ts, sizeof(ts));
     CHECK(matches_digits(ts, "dd/dd/dd-dd:dd:dd.ddd"), "DATETIME_SHORT is DD/MM/YY-HH:MM:SS.mmm");
 
     log_backend_set_timestamp_format(0, LOG_TS_DATETIME);
-    LOG_INFO(NULL, "full");
+    LOGGING_INFO(NULL, "full");
     first_bracket(g_line, ts, sizeof(ts));
     CHECK(matches_digits(ts, "dddd-dd-dd dd:dd:dd.ddd"), "DATETIME is YYYY-MM-DD HH:MM:SS.mmm");
 
     log_backend_set_timestamp_format(0, LOG_TS_TIME_ONLY);
-    LOG_INFO(NULL, "time");
+    LOGGING_INFO(NULL, "time");
     first_bracket(g_line, ts, sizeof(ts));
     CHECK(matches_digits(ts, "dd:dd:dd.ddd"), "TIME_ONLY is HH:MM:SS.mmm");
 
     log_backend_set_timestamp_formatter(0, fmt_no_terminator);
-    LOG_INFO(NULL, "custom");
+    LOGGING_INFO(NULL, "custom");
     first_bracket(g_line, ts, sizeof(ts));
     CHECK(strlen(ts) == LOGGING_TIMESTAMP_BUFFER_SIZE - 1, "unterminated custom formatter is clamped");
 
@@ -182,7 +182,7 @@ static void test_timestamps(void) {
     log_set_timestamp_format(LOG_TS_ELAPSED_MS);
     log_set_timestamp_formatter(NULL);
     CHECK(log_get_timestamp_format() == LOG_TS_NONE, "log_set_timestamp_formatter(NULL) sets NONE");
-    LOG_INFO(NULL, "no ts");
+    LOGGING_INFO(NULL, "no ts");
     CHECK(strcmp(g_line, "INFO   no ts\n") == 0, "no timestamp after formatter NULL");
     log_set_timestamp_format(LOG_TS_DATETIME_SHORT);
 
@@ -192,12 +192,12 @@ static void test_timestamps(void) {
 
 static void test_recursion(void) {
     static log_backend_cfg_t be[] = {
-        { .type = LOG_OUTPUT_CUSTOM, .driver = &rec_driver, .level = LOG_LEVEL_DEBUG,
+        { .type = LOG_OUTPUT_CUSTOM, .driver = &rec_driver, .level = LOGGING_LEVEL_DEBUG,
           .enabled = true, .timestamp_format = LOG_TS_NONE },
     };
     log_init(be, 1);
     double t0 = now_ms();
-    LOG_INFO("t", "outer");
+    LOGGING_INFO("t", "outer");
     double elapsed = now_ms() - t0;
     CHECK(g_rec_calls == 1, "nested log call from a driver is dropped");
     CHECK(elapsed < 50.0, "setter called from a driver does not wait for the lock");
@@ -206,12 +206,12 @@ static void test_recursion(void) {
 
 static void test_reinit_closes_files(void) {
     static log_backend_cfg_t file_be[] = {
-        { .type = LOG_OUTPUT_FILE, .level = LOG_LEVEL_DEBUG, .enabled = true,
+        { .type = LOG_OUTPUT_FILE, .level = LOGGING_LEVEL_DEBUG, .enabled = true,
           .config = "test_reinit.log", .keep_open = true, .timestamp_format = LOG_TS_NONE },
     };
     int fds_before = open_fd_count();
     log_init(file_be, 1);
-    LOG_INFO("t", "first set");
+    LOGGING_INFO("t", "first set");
     int fds_open = open_fd_count();
     log_init(g_cap_backends, 1);   // replaces the set without log_deinit()
     int fds_after = open_fd_count();
@@ -222,11 +222,11 @@ static void test_reinit_closes_files(void) {
 
 static void test_line_truncation(void) {
     char buf[16];
-    size_t len = log_format_line(buf, sizeof(buf), LOG_LEVEL_INFO, "tag", NULL, 0, "",
+    size_t len = log_format_line(buf, sizeof(buf), LOGGING_LEVEL_INFO, "tag", NULL, 0, "",
                                  "a message that is far too long", "\r\n");
     CHECK(len == 15 && buf[13] == '\r' && buf[14] == '\n' && buf[15] == '\0',
           "truncated line keeps CR LF");
-    len = log_format_line(buf, 2, LOG_LEVEL_INFO, NULL, NULL, 0, "", "m", "\r\n");
+    len = log_format_line(buf, 2, LOGGING_LEVEL_INFO, NULL, NULL, 0, "", "m", "\r\n");
     CHECK(len == 0 && buf[0] == '\0', "buffer too small for eol yields empty line");
 }
 

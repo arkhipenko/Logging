@@ -25,7 +25,7 @@ static log_backend_cfg_t g_log_backends[] = {
     {
         .type = LOG_OUTPUT_CUSTOM,
         .driver = &log_driver_serial_arduino,
-        .level = LOG_LEVEL_DEBUG,          // Log all levels
+        .level = LOGGING_LEVEL_DEBUG,      // Log all levels
         .enabled = true,
         .config = NULL,                     // Use Serial (USB)
         .timestamp_format = LOG_TS_ELAPSED_MS,  // Show milliseconds since boot
@@ -51,9 +51,9 @@ void setup() {
     log_platform_init();
     log_init(g_log_backends, sizeof(g_log_backends) / sizeof(g_log_backends[0]));
 
-    LOG_INFO("app", "ESP32 Arduino Logging Example Started");
-    LOG_INFO("app", "Chip model: %s, cores: %d", ESP.getChipModel(), ESP.getChipCores());
-    LOG_INFO("app", "Free heap: %" PRIu32 " bytes", ESP.getFreeHeap());
+    LOGGING_INFO("app", "ESP32 Arduino Logging Example Started");
+    LOGGING_INFO("app", "Chip model: %s, cores: %d", ESP.getChipModel(), ESP.getChipCores());
+    LOGGING_INFO("app", "Free heap: %" PRIu32 " bytes", ESP.getFreeHeap());
 }
 
 void loop() {
@@ -70,25 +70,25 @@ void loop() {
         // Demonstrate different log levels
         switch (counter % 5) {
             case 0:
-                LOG_DEBUG("loop", "Debug message #%" PRIu32 " - detailed info", counter);
+                LOGGING_DEBUG("loop", "Debug message #%" PRIu32 " - detailed info", counter);
                 break;
             case 1:
-                LOG_INFO("loop", "Info message #%" PRIu32 " - normal operation", counter);
+                LOGGING_INFO("loop", "Info message #%" PRIu32 " - normal operation", counter);
                 break;
             case 2:
-                LOG_NOTICE("loop", "Notice #%" PRIu32 " - something noteworthy", counter);
+                LOGGING_NOTICE("loop", "Notice #%" PRIu32 " - something noteworthy", counter);
                 break;
             case 3:
-                LOG_WARNING("loop", "Warning #%" PRIu32 " - potential issue", counter);
+                LOGGING_WARNING("loop", "Warning #%" PRIu32 " - potential issue", counter);
                 break;
             case 4:
-                LOG_ERR("loop", "Error #%" PRIu32 " - something went wrong", counter);
+                LOGGING_ERR("loop", "Error #%" PRIu32 " - something went wrong", counter);
                 break;
         }
 
         // Also log heap status periodically
         if (counter % 5 == 0) {
-            LOG_INFO("heap", "Free: %" PRIu32 ", Min free: %" PRIu32,
+            LOGGING_INFO("heap", "Free: %" PRIu32 ", Min free: %" PRIu32,
                      ESP.getFreeHeap(), ESP.getMinFreeHeap());
         }
     }
