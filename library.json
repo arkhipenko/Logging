@@ -1,0 +1,22 @@
+{
+  "name": "Logging",
+  "keywords": "logging",
+  "description": "General purpose logging framework with log levels and ability to prevent code generation for Release builds",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/arkhipenko/Logging"
+  },
+  "authors":
+  [
+    {
+      "name": "Anatoli Arkhipenko",
+      "email": "arkhipenko@hotmail.com",
+      "url": "https://github.com/arkhipenko",
+      "maintainer": true
+    }
+  ],
+  "version": "2.0.0",
+  "frameworks": "*",
+  "platforms": "*"
+}
