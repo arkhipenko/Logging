@@ -247,6 +247,7 @@ Format specifications:
 | `%I` | IPAddress (`ArduinoLog.h` includes `IPAddress.h` when the core has it; otherwise IPAddress arguments are left out) |
 
 - Arguments are taken by reference (a `String` is not copied) and keep their C++ type. A 64-bit value prints in full, even with `%d`. A missing argument prints `<?>`, an argument of the wrong kind prints `<!>`. A class other than `String` or `IPAddress` (for example `std::string`) is a compile error.
+- `Log.disable()` and `Log.enable()` (not in ArduinoLog) switch the object's output off and on. The level and the other settings are kept, `begin()` does not change the state, and a new object starts enabled. `LOGGING_*()` calls and direct `log_write()` calls are not affected.
 - Levels: FATAL to CRIT, ERROR to ERR, WARNING to WARNING, NOTICE to NOTICE, TRACE to INFO, VERBOSE to DEBUG.
 - Level names: `ArduinoLog.h` defines the ArduinoLog names `LOG_LEVEL_SILENT` through `LOG_LEVEL_VERBOSE` (0-6). `logging.h` and `ArduinoLog.h` can be included in any order. `logging_short.h` cannot share a file with `ArduinoLog.h` (same `LOG_LEVEL_*` spelling, other values): either order stops with a compile error. NimBLE also defines `LOG_LEVEL_ERROR` (3), exactly as with ArduinoLog 1.0.3; define `LOGGING_ARDUINOLOG_PREFIXED_ONLY` to keep only the `ARDUINO_LOG_LEVEL_*` names and avoid that overlap.
 - Output layout (as ArduinoLog): prefix callback, `N: `, message, newline, suffix callback. One trailing CR in the message is removed, so every call is one line.

@@ -288,6 +288,12 @@ class Logging {
     void setSuffix(printfunction f);
     void setOutput(Print *output);
 
+    // Not in ArduinoLog: switch this object's output off and on. The level and
+    // the other settings are kept. Enabled after construction; begin() keeps
+    // the state.
+    void enable();
+    void disable();
+
     // Arguments are taken by reference: no String copies at the call site.
     // The second template argument is the library level of to_library_level().
     template <class T, typename... Args> LOG_COMPAT_INLINE void fatal(const T &msg, const Args &... args) {
@@ -345,11 +351,12 @@ class Logging {
     LOG_COMPAT_INLINE void emit(int, const char *, const Args &...) {}
 #endif
 
-    // Level check, level mapping and hand-off to the core (out of line)
+    // Enable, level check, level mapping and hand-off to the core (out of line)
     void write(int level, const char *msg, const unsigned char *kinds,
                const log_value_t *values, size_t count);
 
     int _level;
+    bool _enabled;
     log_arduino_print_cfg_t _cfg;
     log_backend_cfg_t _backend;
 };

@@ -141,6 +141,16 @@ int main() {
     Log.fatal("silent" CR);                          check(cap.take(), "", "SILENT");
     Log.setLevel(99);
     check(Log.getLevel() == ARDUINO_LOG_LEVEL_VERBOSE ? "ok" : "bad", "ok", "setLevel clamps");
+    Log.disable();
+    Log.fatal("off" CR);
+    Log.verbose("off %d" CR, 1);                     check(cap.take(), "", "disable() drops every level");
+    check(Log.getLevel() == ARDUINO_LOG_LEVEL_VERBOSE ? "ok" : "bad", "ok", "disable() keeps the level");
+    Log.begin(ARDUINO_LOG_LEVEL_VERBOSE, &cap);
+    Log.notice("still off" CR);                      check(cap.take(), "", "begin() keeps disabled");
+    Log.enable();
+    Log.notice("on %d" CR, 2);                       check(cap.take(), "PFX N: on 2\n", "enable()");
+    Log.enable();
+    Log.notice("twice" CR);                          check(cap.take(), "PFX N: twice\n", "enable() twice");
     CapturePrint other;
     Log.setOutput(&other);
     Log.notice("moved" CR);

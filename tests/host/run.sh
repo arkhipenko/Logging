@@ -81,7 +81,7 @@ for std in gnu++11 gnu++17; do
     $CXX -std=$std $CXXFLAGS -o "t_arduinolog_$std" "$HERE/test_arduinolog.cpp" "$SRC/ArduinoLog.cpp" san_*.o -lpthread \
         && run "arduinolog_$std" "./t_arduinolog_$std" || fail "ArduinoLog build $std"
 done
-printf '#include <ArduinoLog.h>\nvolatile unsigned long vul = 1;\nvoid f(void) { Log.notice("x %%d %%lu" CR, 1, vul); Log.begin(ARDUINO_LOG_LEVEL_VERBOSE, NULL); }\n' > disabled.cpp
+printf '#include <ArduinoLog.h>\nvolatile unsigned long vul = 1;\nvoid f(void) { Log.notice("x %%d %%lu" CR, 1, vul); Log.begin(ARDUINO_LOG_LEVEL_VERBOSE, NULL); Log.disable(); Log.enable(); }\n' > disabled.cpp
 $CXX -std=gnu++11 $CXXFLAGS -DDISABLE_LOGGING -c disabled.cpp -o disabled.o \
     && $CXX -std=gnu++11 $CXXFLAGS -DDISABLE_LOGGING -c "$SRC/ArduinoLog.cpp" -o disabled_al.o \
     && pass "ArduinoLog.h builds with DISABLE_LOGGING" || fail "ArduinoLog.h with DISABLE_LOGGING"

@@ -100,7 +100,7 @@ const log_backend_driver_t log_driver_arduino_print = {
 //  Logging Class
 // *************************************************************************
 
-Logging::Logging() : _level(ARDUINO_LOG_LEVEL_SILENT) {
+Logging::Logging() : _level(ARDUINO_LOG_LEVEL_SILENT), _enabled(true) {
     _cfg.output = NULL;
     _cfg.show_level = true;
     _cfg.prefix = NULL;
@@ -137,7 +137,7 @@ void Logging::begin(int level, Print *output, bool showLevel) {
 void Logging::write(int level, const char *msg, const unsigned char *kinds,
                     const log_value_t *values, size_t count) {
 #ifndef LOGGING_DISABLE_LOGGING
-    if (level <= ARDUINO_LOG_LEVEL_SILENT || level > _level) {
+    if (!_enabled || level <= ARDUINO_LOG_LEVEL_SILENT || level > _level) {
         return;
     }
     log_write_values(logging_compat::to_library_level(level), NULL, NULL, 0, msg,
@@ -183,6 +183,14 @@ void Logging::setSuffix(printfunction f) {
 
 void Logging::setOutput(Print *output) {
     _cfg.output = output;
+}
+
+void Logging::enable() {
+    _enabled = true;
+}
+
+void Logging::disable() {
+    _enabled = false;
 }
 
 #ifndef DISABLE_STATIC_LOG
