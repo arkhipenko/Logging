@@ -91,6 +91,19 @@ if ! $CXX -std=gnu++11 $CXXFLAGS -c unsupported.cpp -o unsupported.o 2> unsuppor
 else
     fail "unsupported argument type not rejected"
 fi
+# IPAddress header: fake_arduino has the n-able layout (IPAddress.h, not included
+# by Arduino.h; the %I tests above use it). Also the ArduinoCore-API layout and a
+# core without IPAddress.h.
+mkdir -p core_api/api core_noip
+cp "$HERE/fake_arduino/Arduino.h" core_api/ && cp "$HERE/fake_arduino/IPAddress.h" core_api/api/
+cp "$HERE/fake_arduino/Arduino.h" core_noip/
+printf '#include <ArduinoLog.h>\nvoid f(void) { Log.notice("%%I %%d" CR, IPAddress(1, 2, 3, 4), 5); }\n' > ip_api.cpp
+$CXX -std=gnu++11 -Wall -Wextra -Werror -DARDUINO=100 -Icore_api -I$SRC -c ip_api.cpp -o ip_api.o \
+    && pass "IPAddress from api/IPAddress.h (ArduinoCore-API layout)" || fail "IPAddress from api/IPAddress.h"
+printf '#include <ArduinoLog.h>\nvoid f(void) { Log.notice("%%d %%s" CR, 5, "x"); }\n' > ip_none.cpp
+$CXX -std=gnu++11 -Wall -Wextra -Werror -DARDUINO=100 -Icore_noip -I$SRC -c ip_none.cpp -o ip_none.o \
+    && $CXX -std=gnu++11 -Wall -Wextra -Werror -DARDUINO=100 -Icore_noip -I$SRC -c "$SRC/ArduinoLog.cpp" -o ip_none_al.o \
+    && pass "core without IPAddress.h: ArduinoLog.h builds, IPAddress left out" || fail "core without IPAddress.h"
 
 echo "== level names (ArduinoLog.h, NimBLE) =="
 NAMES="-std=gnu++11 -Wall -Wextra -DARDUINO=100 -I$HERE/fake_arduino -I$SRC -I$HERE"
@@ -173,6 +186,70 @@ $CC $CFLAGS -I$HERE -o t_app app_prefix.c -L. -llogging -lpthread && ./t_app | g
     && pass "copy of logging_short.h with LOG_ -> APP_: works next to syslog.h and NimBLE" || fail "renamed copy"
 printf '#include "logging_short.h"\n#include "app_log.h"\nint f(void) { LOG_INFO("t", "x"); APP_INFO("t", "y"); return LOG_LEVEL_INFO + APP_LEVEL_INFO; }\n' > both_copies.c
 $CC $CFLAGS -c both_copies.c -o both_copies.o && pass "logging_short.h and a renamed copy in one file" || fail "logging_short.h and a renamed copy in one file"
+
+echo "== compile-time maximum level (LOGGING_MAX_COMPILED_LEVEL) =="
+# The library archive is built without the flag: only the calling file needs it.
+# Objects are compiled without -O, so the string checks hold at -O0.
+NAMES_C=(EMERG ALERT CRIT ERR WARN NOTICE INFO DEBUG)
+for c in ":7" "LOGGING_LEVEL_INFO:6" "5:5" "LOGGING_LEVEL_ERR:3" "LOGGING_LEVEL_EMERG:0" "LOGGING_LEVEL_NONE:-1"; do
+    flag=${c%:*} max=${c##*:} name=cl_${c##*:}
+    [ -n "$flag" ] && def="-DLOGGING_MAX_COMPILED_LEVEL=$flag" || def=""
+    : > $name.expected
+    for l in 0 1 2 3 4 5 6 7; do
+        [ $l -le $max ] || continue
+        v=$((l + 1)); [ $l -eq 7 ] && v=15
+        printf '%-6s [c] lvl%d_text %d\n' "${NAMES_C[$l]}" $l $v >> $name.expected
+    done
+    echo "evaluated $((max + 1))" >> $name.expected
+    label="max ${flag:-(not set)}"
+    if $CC $CFLAGS $def -c "$HERE/test_compiled_level.c" -o $name.o && $CC -o t_$name $name.o -L. -llogging -lpthread \
+        && ./t_$name > $name.out && cmp -s $name.out $name.expected; then
+        pass "$label: only levels <= $max print, arguments of the others not evaluated"
+    else
+        fail "$label: output"; diff $name.expected $name.out | head -5
+    fi
+    bad=""
+    for l in 0 1 2 3 4 5 6 7; do
+        if grep -q "lvl${l}_text" $name.o; then [ $l -le $max ] || bad="$bad $l"; else [ $l -gt $max ] || bad="$bad !$l"; fi
+    done
+    [ -z "$bad" ] && pass "$label: format strings of removed calls are not in the object (-O0)" || fail "$label: strings wrong for levels$bad"
+done
+if nm cl_-1.o | grep -q log_write; then fail "LOGGING_LEVEL_NONE: object still references log_write"; else pass "LOGGING_LEVEL_NONE: object has no reference to log_write"; fi
+${CXX:-g++} -std=c++20 -Wall -Wextra -Wno-missing-field-initializers -Werror -g -I$SRC -DLOGGING_MAX_COMPILED_LEVEL=LOGGING_LEVEL_INFO -x c++ -c "$HERE/test_compiled_level.c" -o cl_cpp.o \
+    && ${CXX:-g++} -o t_cl_cpp cl_cpp.o -L. -llogging -lpthread && ./t_cl_cpp | cmp -s - cl_6.expected && ! grep -q lvl7_text cl_cpp.o \
+    && pass "C++: same output and no DEBUG string" || fail "C++ with LOGGING_MAX_COMPILED_LEVEL"
+printf '#include "logging.h"\nvoid f(void) { LOGGING_DEBUG("t", "%%s", 1); }\n' > cl_format.c
+expect_error cl_format.c 'Werror=format' $CC $CFLAGS -DLOGGING_MAX_COMPILED_LEVEL=LOGGING_LEVEL_INFO \
+    && pass "a removed call still has its format checked" || fail "format of a removed call not checked"
+printf '#include "logging.h"\nvoid f(void) { LOGGING_INFO("t", "x"); }\n' > cl_name.c
+expect_error cl_name.c 'LOG_LEVEL_INFO.* undeclared' $CC $CFLAGS -DLOGGING_MAX_COMPILED_LEVEL=LOG_LEVEL_INFO \
+    && pass "an unknown level name in the flag is a compile error, not 0" || fail "unknown level name in the flag accepted"
+printf '#include <ArduinoLog.h>\nvoid f(void) { Log.notice("x" CR); }\n' > cla_name.cpp
+expect_error cla_name.cpp 'LOG_LEVEL_INFO.* not declared' $CXX -std=gnu++11 -DARDUINO=100 -I$HERE/fake_arduino -I$SRC -DLOGGING_MAX_COMPILED_LEVEL=LOG_LEVEL_INFO \
+    && pass "ArduinoLog.h: an unknown level name in the flag is a compile error" || fail "ArduinoLog.h: unknown level name in the flag accepted"
+ALNAMES=("" "" "F:fatal" "E:error" "W:warning" "N:notice" "T:trace" "V:verbose")
+for c in ":7" "LOGGING_LEVEL_INFO:6" "LOGGING_LEVEL_ERR:3" "LOGGING_LEVEL_NONE:-1"; do
+    flag=${c%:*} max=${c##*:} name=cla_${c##*:}
+    [ -n "$flag" ] && def="-DLOGGING_MAX_COMPILED_LEVEL=$flag" || def=""
+    : > $name.expected
+    for l in 2 3 4 5 6 7; do
+        [ $l -le $max ] && printf '%s: %s_text 5\n' "${ALNAMES[$l]%%:*}" "${ALNAMES[$l]##*:}" >> $name.expected
+    done
+    label="ArduinoLog, max ${flag:-(not set)}"
+    if $CXX -std=gnu++11 $CXXFLAGS $def -o t_$name "$HERE/test_compiled_level_arduinolog.cpp" "$SRC/ArduinoLog.cpp" san_*.o -lpthread \
+        && ./t_$name > $name.out && cmp -s $name.out $name.expected; then
+        pass "$label: only methods of library level <= $max print"
+    else
+        fail "$label: output"; diff $name.expected $name.out | head -5
+    fi
+    # String literals of removed method calls go away with optimization (they stay at -O0)
+    $CXX -std=gnu++11 -Os -Wall -Wextra -Werror -DARDUINO=100 -I$HERE/fake_arduino -I$SRC $def -c "$HERE/test_compiled_level_arduinolog.cpp" -o $name.o
+    bad=""
+    for l in 2 3 4 5 6 7; do
+        if grep -q "${ALNAMES[$l]##*:}_text" $name.o; then [ $l -le $max ] || bad="$bad $l"; else [ $l -gt $max ] || bad="$bad !$l"; fi
+    done
+    [ -z "$bad" ] && pass "$label: format strings of removed calls are not in the object (-Os)" || fail "$label: strings wrong for levels$bad"
+done
 
 echo "== threads under AddressSanitizer =="
 $CC $CFLAGS -fsanitize=address -o t_threads "$HERE/test_threads.c" $LIB_SRCS -lpthread && run threads ./t_threads || fail "threads build or run"

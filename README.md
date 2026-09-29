@@ -244,7 +244,7 @@ Format specifications:
 | `%t`, `%T` | `T`/`F`, `true`/`false` |
 | `%b`, `%B` | binary, `0b` + binary |
 | `%S`, `%P` | String, flash string (`%s` accepts both too) |
-| `%I` | IPAddress |
+| `%I` | IPAddress (`ArduinoLog.h` includes `IPAddress.h` when the core has it; otherwise IPAddress arguments are left out) |
 
 - Arguments are taken by reference (a `String` is not copied) and keep their C++ type. A 64-bit value prints in full, even with `%d`. A missing argument prints `<?>`, an argument of the wrong kind prints `<!>`. A class other than `String` or `IPAddress` (for example `std::string`) is a compile error.
 - Levels: FATAL to CRIT, ERROR to ERR, WARNING to WARNING, NOTICE to NOTICE, TRACE to INFO, VERBOSE to DEBUG.
@@ -331,6 +331,27 @@ Syslog-compatible levels (lower number = higher severity). `logging.h` defines o
 | DEBUG | 7 | `LOGGING_LEVEL_DEBUG` | `LOGGING_DEBUG()` | Debug messages |
 
 `LOGGING_LEVEL_MAX` equals `LOGGING_LEVEL_DEBUG`.
+
+### Compiled-in Levels (`LOGGING_MAX_COMPILED_LEVEL`)
+
+A backend's level decides what is shown at run time. `LOGGING_MAX_COMPILED_LEVEL` decides what exists in the binary at all: calls above it compile to nothing, so no backend level can bring them back.
+
+```bash
+# Keep EMERG .. INFO, remove every LOGGING_DEBUG() call
+gcc -DLOGGING_MAX_COMPILED_LEVEL=LOGGING_LEVEL_INFO ...
+```
+
+```ini
+; PlatformIO
+build_flags = -DLOGGING_MAX_COMPILED_LEVEL=LOGGING_LEVEL_INFO
+```
+
+- Value: a number (-1 to 7) or a `LOGGING_LEVEL_*` name. Default `LOGGING_LEVEL_DEBUG` (everything compiled). `LOGGING_LEVEL_NONE` removes every call. Do not use a short name such as `LOG_LEVEL_INFO`: NimBLE and ArduinoLog give it other values. A name that is not defined in a file is a compile error at its first logging call, not a silent 0.
+- A removed call leaves no code, no format string, no tag and no `__FILE__` string in the object, also at `-O0`. Its arguments are not evaluated, so do not put side effects in them.
+- The compiler still checks the format and the arguments of a removed call, and a variable used only there gives no unused warning. That is the difference from `LOGGING_DISABLE_LOGGING`, which ignores the arguments completely.
+- The ArduinoLog methods follow the same limit through their library level (`verbose` is DEBUG, `trace` is INFO, see ArduinoLog Compatibility). A removed method call does nothing and reads no argument. Its string literals are dropped when optimizing (`-Os`, `-Og` and above; Arduino builds use `-Os`); at `-O0` they stay in the object.
+- Only the files that log need the flag, the library sources do not. Pass it as a global build flag anyway, so every file uses the same limit.
+- Calling `log_write()` directly is not affected.
 
 ### Short Names (`logging_short.h`)
 
@@ -543,6 +564,10 @@ Define these as compiler flags, so that the library sources and your code see th
 ```c
 // Disable all logging: macros become no-ops and arguments are not evaluated
 #define LOGGING_DISABLE_LOGGING
+
+// Most verbose level compiled in (default: LOGGING_LEVEL_DEBUG). Calls above it
+// compile to nothing. See "Compiled-in Levels".
+#define LOGGING_MAX_COMPILED_LEVEL LOGGING_LEVEL_INFO
 
 // Enable file/line information globally (disabled by default)
 #define LOGGING_ENABLE_FILE_LINE

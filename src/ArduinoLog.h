@@ -24,6 +24,25 @@
 
 #include <Arduino.h>
 
+// IPAddress (%I). Not every core declares it in Arduino.h: n-able 0.3.1
+// (nRF52) has IPAddress.h but includes it only from Client.h. The header is
+// included when it exists; cores built on ArduinoCore-API keep it in
+// api/IPAddress.h. Without either header, IPAddress arguments are left out.
+// A compiler without __has_include relies on Arduino.h, as before.
+#if defined(__has_include)
+#if __has_include(<IPAddress.h>)
+#include <IPAddress.h>
+#define LOG_COMPAT_IPADDRESS 1
+#elif __has_include(<api/IPAddress.h>)
+#include <api/IPAddress.h>
+#define LOG_COMPAT_IPADDRESS 1
+#else
+#define LOG_COMPAT_IPADDRESS 0
+#endif
+#else
+#define LOG_COMPAT_IPADDRESS 1
+#endif
+
 // ArduinoLog switch: DISABLE_LOGGING turns logging off as before. Define it
 // as a global build flag so the library sources see it too.
 #if defined(DISABLE_LOGGING) && !defined(LOGGING_DISABLE_LOGGING)
@@ -175,6 +194,7 @@ struct arg_traits<T, typename std::enable_if<std::is_base_of<String, T>::value>:
     static LOG_COMPAT_INLINE void store(log_value_t &v, const T &x) { v.s = x.c_str(); }
 };
 
+#if LOG_COMPAT_IPADDRESS
 // IPv4 address
 template <typename T>
 struct arg_traits<T, typename std::enable_if<std::is_base_of<IPAddress, T>::value>::type> {
@@ -183,6 +203,7 @@ struct arg_traits<T, typename std::enable_if<std::is_base_of<IPAddress, T>::valu
         v.u32 = (uint32_t)x[0] | ((uint32_t)x[1] << 8) | ((uint32_t)x[2] << 16) | ((uint32_t)x[3] << 24);
     }
 };
+#endif
 
 // Other pointers, and nullptr
 template <typename T>
@@ -267,27 +288,43 @@ class Logging {
     void setSuffix(printfunction f);
     void setOutput(Print *output);
 
-    // Arguments are taken by reference: no String copies at the call site
+    // Arguments are taken by reference: no String copies at the call site.
+    // The second template argument is the library level of to_library_level().
     template <class T, typename... Args> LOG_COMPAT_INLINE void fatal(const T &msg, const Args &... args) {
-        emit(ARDUINO_LOG_LEVEL_FATAL, logging_compat::format_ptr(msg), args...);
+        call<ARDUINO_LOG_LEVEL_FATAL, LOGGING_LEVEL_CRIT>(msg, args...);
     }
     template <class T, typename... Args> LOG_COMPAT_INLINE void error(const T &msg, const Args &... args) {
-        emit(ARDUINO_LOG_LEVEL_ERROR, logging_compat::format_ptr(msg), args...);
+        call<ARDUINO_LOG_LEVEL_ERROR, LOGGING_LEVEL_ERR>(msg, args...);
     }
     template <class T, typename... Args> LOG_COMPAT_INLINE void warning(const T &msg, const Args &... args) {
-        emit(ARDUINO_LOG_LEVEL_WARNING, logging_compat::format_ptr(msg), args...);
+        call<ARDUINO_LOG_LEVEL_WARNING, LOGGING_LEVEL_WARNING>(msg, args...);
     }
     template <class T, typename... Args> LOG_COMPAT_INLINE void notice(const T &msg, const Args &... args) {
-        emit(ARDUINO_LOG_LEVEL_NOTICE, logging_compat::format_ptr(msg), args...);
+        call<ARDUINO_LOG_LEVEL_NOTICE, LOGGING_LEVEL_NOTICE>(msg, args...);
     }
     template <class T, typename... Args> LOG_COMPAT_INLINE void trace(const T &msg, const Args &... args) {
-        emit(ARDUINO_LOG_LEVEL_TRACE, logging_compat::format_ptr(msg), args...);
+        call<ARDUINO_LOG_LEVEL_TRACE, LOGGING_LEVEL_INFO>(msg, args...);
     }
     template <class T, typename... Args> LOG_COMPAT_INLINE void verbose(const T &msg, const Args &... args) {
-        emit(ARDUINO_LOG_LEVEL_VERBOSE, logging_compat::format_ptr(msg), args...);
+        call<ARDUINO_LOG_LEVEL_VERBOSE, LOGGING_LEVEL_DEBUG>(msg, args...);
     }
 
   private:
+    // Levels above LOGGING_MAX_COMPILED_LEVEL select the empty overload, so
+    // nothing of the call is instantiated or kept
+    template <int Level, int LibraryLevel, class T, typename... Args>
+    LOG_COMPAT_INLINE void call(const T &msg, const Args &... args) {
+        call<Level>(std::integral_constant<bool, (LibraryLevel <= (LOGGING_MAX_COMPILED_LEVEL))>(), msg, args...);
+    }
+
+    template <int Level, class T, typename... Args>
+    LOG_COMPAT_INLINE void call(std::true_type, const T &msg, const Args &... args) {
+        emit(Level, logging_compat::format_ptr(msg), args...);
+    }
+
+    template <int Level, class T, typename... Args>
+    LOG_COMPAT_INLINE void call(std::false_type, const T &, const Args &...) {}
+
 #ifndef LOGGING_DISABLE_LOGGING
     LOG_COMPAT_INLINE void emit(int level, const char *msg) {
         write(level, msg, NULL, NULL, 0);

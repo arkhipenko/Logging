@@ -33,6 +33,14 @@ extern "C" {
 // Uncomment to enable file/line information in logs
 // #define LOGGING_ENABLE_FILE_LINE
 
+// Most verbose level compiled into the binary: a number or a LOGGING_LEVEL_*
+// name, for example -DLOGGING_MAX_COMPILED_LEVEL=LOGGING_LEVEL_INFO.
+// Calls above it leave no code and no strings. Backend levels set at run
+// time select only among the compiled levels. LOGGING_LEVEL_NONE removes all.
+#ifndef LOGGING_MAX_COMPILED_LEVEL
+#define LOGGING_MAX_COMPILED_LEVEL LOGGING_LEVEL_DEBUG
+#endif
+
 // Lock timeout in milliseconds
 #ifndef LOGGING_LOCK_TIMEOUT_MS
 #define LOGGING_LOCK_TIMEOUT_MS 200
@@ -514,16 +522,24 @@ void log_write_cb(unsigned int level, const char *tag, const char *file,
 #endif
 
 #ifndef LOGGING_DISABLE_LOGGING
-    #define LOGGING_EMERG(tag, fmt, ...)   log_write(LOGGING_LEVEL_EMERG, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOGGING_ALERT(tag, fmt, ...)   log_write(LOGGING_LEVEL_ALERT, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOGGING_CRIT(tag, fmt, ...)    log_write(LOGGING_LEVEL_CRIT, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOGGING_ERR(tag, fmt, ...)     log_write(LOGGING_LEVEL_ERR, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOGGING_WARNING(tag, fmt, ...) log_write(LOGGING_LEVEL_WARNING, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOGGING_NOTICE(tag, fmt, ...)  log_write(LOGGING_LEVEL_NOTICE, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOGGING_INFO(tag, fmt, ...)    log_write(LOGGING_LEVEL_INFO, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
-    #define LOGGING_DEBUG(tag, fmt, ...)   log_write(LOGGING_LEVEL_DEBUG, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__)
+    // A call above LOGGING_MAX_COMPILED_LEVEL is a constant false condition:
+    // no code, no strings and no evaluated arguments remain, even at -O0,
+    // but the compiler still checks the format and the argument types.
+    #define LOGGING_CALL(level, tag, fmt, ...) \
+        ((void)((int)(level) <= (LOGGING_MAX_COMPILED_LEVEL) && \
+                (log_write(level, tag, LOGGING_WHERE, fmt, ##__VA_ARGS__), 1)))
+
+    #define LOGGING_EMERG(tag, fmt, ...)   LOGGING_CALL(LOGGING_LEVEL_EMERG, tag, fmt, ##__VA_ARGS__)
+    #define LOGGING_ALERT(tag, fmt, ...)   LOGGING_CALL(LOGGING_LEVEL_ALERT, tag, fmt, ##__VA_ARGS__)
+    #define LOGGING_CRIT(tag, fmt, ...)    LOGGING_CALL(LOGGING_LEVEL_CRIT, tag, fmt, ##__VA_ARGS__)
+    #define LOGGING_ERR(tag, fmt, ...)     LOGGING_CALL(LOGGING_LEVEL_ERR, tag, fmt, ##__VA_ARGS__)
+    #define LOGGING_WARNING(tag, fmt, ...) LOGGING_CALL(LOGGING_LEVEL_WARNING, tag, fmt, ##__VA_ARGS__)
+    #define LOGGING_NOTICE(tag, fmt, ...)  LOGGING_CALL(LOGGING_LEVEL_NOTICE, tag, fmt, ##__VA_ARGS__)
+    #define LOGGING_INFO(tag, fmt, ...)    LOGGING_CALL(LOGGING_LEVEL_INFO, tag, fmt, ##__VA_ARGS__)
+    #define LOGGING_DEBUG(tag, fmt, ...)   LOGGING_CALL(LOGGING_LEVEL_DEBUG, tag, fmt, ##__VA_ARGS__)
 #else
     // Logging disabled - all macros become no-ops
+    #define LOGGING_CALL(level, tag, fmt, ...) ((void)0)
     #define LOGGING_EMERG(tag, fmt, ...)   ((void)0)
     #define LOGGING_ALERT(tag, fmt, ...)   ((void)0)
     #define LOGGING_CRIT(tag, fmt, ...)    ((void)0)

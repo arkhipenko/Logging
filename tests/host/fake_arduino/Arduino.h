@@ -1,6 +1,7 @@
 /* Minimal Arduino API stand-in for host tests of ArduinoLog.h (tests only).
  * Covers what the ArduinoLog interface uses: Print, String (with
- * StringSumHelper), IPAddress, __FlashStringHelper and F(). */
+ * StringSumHelper), __FlashStringHelper and F(). IPAddress is in
+ * IPAddress.h and not included here, as in the n-able core. */
 #ifndef FAKE_ARDUINO_H
 #define FAKE_ARDUINO_H
 
@@ -31,14 +32,6 @@ inline StringSumHelper operator+(const String &l, const String &r) {
     t.s_ += r.s_;
     return t;
 }
-
-class IPAddress {
-  public:
-    IPAddress(uint8_t a, uint8_t b, uint8_t c, uint8_t d) { b_[0] = a; b_[1] = b; b_[2] = c; b_[3] = d; }
-    uint8_t operator[](int i) const { return b_[i]; }
-  private:
-    uint8_t b_[4];
-};
 
 class Print {
   public:
