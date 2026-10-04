@@ -558,6 +558,10 @@ gcc -o your_app your_app.c \
 
 Add the library as a dependency. All sources are compiled and the matching platform is selected. `examples/esp32_arduino` shows this with `lib_deps = symlink://../..`.
 
+### Arduino IDE and arduino-cli
+
+`library.properties` marks the library as the Arduino 1.5 format, so the Arduino IDE and arduino-cli compile everything under `src/` (backends and platforms included) and find `logging.h` and `ArduinoLog.h`. Install it from the repository (Sketch > Include Library > Add .ZIP Library, or `arduino-cli lib install --git-url https://github.com/arkhipenko/Logging.git#v3.1.1`, which needs `library.enable_unsafe_install`). `examples/arduinolog_serial` is a sketch using `ArduinoLog.h`.
+
 ## Compile-Time Configuration
 
 Define these as compiler flags, so that the library sources and your code see the same values:
@@ -640,6 +644,8 @@ FREERTOS_KERNEL=<FreeRTOS-Kernel> tests/freertos_host/run.sh  # STM32 FreeRTOS p
 tests/stack/run.sh                                  # ESP32 stack budget (PlatformIO xtensa toolchain)
 ```
 
+GitHub Actions (`.github/workflows/ci.yml`) runs the host tests and compiles the ESP32 examples with arduino-cli and PlatformIO on every push to `main` and `testing`.
+
 ## Files
 
 ```
@@ -662,9 +668,12 @@ Logging/
 |       +-- stm32.c         # STM32 (HAL + optional FreeRTOS)
 |       +-- esp32.c         # ESP32 (ESP-IDF)
 +-- examples/
+|   +-- arduinolog_serial/  # Arduino IDE / arduino-cli sketch (ArduinoLog.h)
 |   +-- esp32_arduino/      # PlatformIO Arduino-ESP32 example
 |   +-- stm32/              # STM32 usage examples
 +-- tests/                  # Host, STM32 and FreeRTOS simulator tests
++-- library.json            # PlatformIO manifest
++-- library.properties      # Arduino IDE / arduino-cli manifest
 +-- README.md
 ```
 
