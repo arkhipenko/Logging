@@ -9,15 +9,29 @@ on:
 jobs:
   host-tests:
     name: Host tests (gcc, g++, sanitizers)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Run host tests
         run: bash tests/host/run.sh
 
+  # Informational only: the current ubuntu-latest image (Ubuntu 26.04 from
+  # 2026-10-19) ships a newer gcc on which one host check behaves differently
+  # (the format of a compiled-out call is not checked). Does not block.
+  host-tests-latest:
+    name: Host tests on ubuntu-latest (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compiler versions
+        run: gcc --version && g++ --version
+      - name: Run host tests
+        run: bash tests/host/run.sh
+
   arduino-cli:
     name: Examples (ESP32, arduino-cli)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: arduino/compile-sketches@v1
@@ -33,7 +47,7 @@ jobs:
 
   platformio:
     name: Examples (ESP32, PlatformIO)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
