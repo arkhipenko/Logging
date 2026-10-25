@@ -11,7 +11,7 @@ A flexible, thread-safe logging framework for C with support for multiple simult
 - **Runtime Configuration**: Enable/disable backends and change levels at runtime
 - **Configurable Timestamps**: 7 built-in formats plus custom formatter callback
 - **Default Console Output**: Works without initialization - logs to console by default
-- **Thread-Safe**: Mutex-based locking with timeout (pthread on POSIX, FreeRTOS on STM32 and ESP32)
+- **Thread-Safe**: Mutex-based locking with timeout (pthread on POSIX, FreeRTOS on STM32, ESP32 and other Cortex-M targets)
 - **Recursion-Safe**: A log call made from inside a driver or formatter is dropped instead of deadlocking (per thread, or per task on FreeRTOS)
 - **Syslog-Compatible Levels**: 8 standard levels (EMERG through DEBUG)
 - **Fail-Safe**: Silent error handling - logging never crashes your application
@@ -108,11 +108,13 @@ Each platform file provides the lock, the time source and the recursion guard. T
 | STM32 (HAL) | a family macro is defined (`STM32F4`, `STM32L4`, ...) | `platforms/stm32.c`, `backends/serial_stm32.c` | HAL_GetTick, FreeRTOS or bare-metal lock |
 | ESP32 (ESP-IDF, Arduino-ESP32) | `ESP_PLATFORM` or `ESP32` | `platforms/esp32.c`, `backends/serial_esp32.c` | esp_timer, FreeRTOS mutex |
 | Linux/Unix/macOS | `__linux__`, `__unix__` or `__APPLE__` | `platforms/linux.c` | pthread mutex, clock_gettime, wall clock |
-| Anything else | none of the above | (core defaults) | timestamp 0, no lock |
+| FreeRTOS on Cortex-M (nRF52, RP2040, SAMD51, ...) | none of the above, an M-profile Arm compiler, and `FreeRTOS.h` or `freertos/FreeRTOS.h` on the include path (or `LOGGING_FREERTOS`) | `platforms/freertos_cm.c` | FreeRTOS mutex, per-task guard, tick timestamp |
+| Anything else | none of the above, or `LOGGING_FREERTOS_DISABLE` | (core defaults) | timestamp 0, no lock |
 
 - Compile all platform files. The ones that do not match compile to nothing.
 - The STM32 family macro (for example `STM32F4`) must be visible to the library. If your build defines only the device macro (for example `STM32F407xx`), add the family macro (`-DSTM32F4`).
 - STM32 uses the FreeRTOS lock when `USE_FREERTOS` or `LOGGING_STM32_FREERTOS` is defined, or when `FreeRTOS.h` is on the include path. Define `LOGGING_STM32_BARE_METAL` to force the bare-metal lock.
+- FreeRTOS on Cortex-M (3.1.2): a FreeRTOS build for an Arm M-profile core that is not STM32 or ESP32 (for example nRF52 with the n-able or Adafruit Arduino core, RP2040 or SAMD51 with FreeRTOS) gets the mutex, the per-task guard and a timestamp from the FreeRTOS tick (`configTICK_RATE_HZ` resolution) without any vendor HAL. Both header layouts are detected; define `LOGGING_FREERTOS` on a compiler without `__has_include`. Define `LOGGING_FREERTOS_DISABLE` to keep the core defaults instead. Verified with the n-able core on nRF52840; other cores are expected to work but have not been tested. There is no vendor serial driver for this platform: use `ArduinoLog.h` with an Arduino `Print`, or a custom driver.
 - Define `LOGGING_CUSTOM_PLATFORM` to disable the shipped platforms and provide your own hooks (see Platform Functions below).
 
 **STM32 Example:**
@@ -378,6 +380,15 @@ LOG_INFO("app", "started");
 
 3.0.0 removed the short names from `logging.h`. In each file that uses `LOG_LEVEL_*` or `LOG_INFO()` and the others, either include `logging_short.h` instead of `logging.h`, or rename to `LOGGING_LEVEL_*` and `LOGGING_INFO()`. `LOGGING_NO_SHORT_NAMES` no longer exists; defining it has no effect.
 
+### Upgrading to 3.1.2 (FreeRTOS on Cortex-M)
+
+Before 3.1.2, a FreeRTOS build on a Cortex-M core other than STM32 and ESP32 (for example nRF52 with an Arduino core) ran on the core defaults: no lock and one guard flag for the whole program, so a log call made while another task was inside a log call was silently dropped. 3.1.2 selects the FreeRTOS Cortex-M platform there automatically. What changes on such a target:
+
+- Concurrent calls wait for the mutex (up to `LOGGING_LOCK_TIMEOUT_MS`, 200 ms) instead of being dropped. After a timeout, the unlocked fallback runs and puts a 128-byte buffer on the calling task's stack; that path was unreachable before, so re-check tight task stacks.
+- A log call from an interrupt handler is dropped. Before, it ran unprotected.
+- An application that overrode `log_lock`, `log_guard_enter` or another hook gets a duplicate-symbol link error. Define `LOGGING_CUSTOM_PLATFORM` (own hooks) or `LOGGING_FREERTOS_DISABLE` (old behaviour).
+- `Log.begin()` and `log_platform_init()` create the mutex; `ArduinoLog.h` users need no code change.
+
 ## API Reference
 
 ### Initialization and Cleanup
@@ -461,8 +472,8 @@ void log_platform_init(void);
 void log_platform_deinit(void);
 ```
 
-- A shipped platform defines all of them. Replacing one of them there causes a duplicate-symbol link error: define `LOGGING_CUSTOM_PLATFORM` and provide your own.
-- With `LOGGING_CUSTOM_PLATFORM`, or on a target without a shipped platform, the core supplies weak defaults (timestamp 0, no lock, one guard flag). Override any of them in your application sources. An override placed in a static library may be ignored by the linker, so keep it in an application source file.
+- A shipped platform (POSIX, STM32, ESP32, FreeRTOS Cortex-M) defines all of them. Replacing one of them there causes a duplicate-symbol link error: define `LOGGING_CUSTOM_PLATFORM` and provide your own. On a FreeRTOS Cortex-M target, `LOGGING_FREERTOS_DISABLE` also works: the core defaults return and single overrides are possible again.
+- With `LOGGING_CUSTOM_PLATFORM`, or on a target without a shipped platform (since 3.1.2 this no longer includes FreeRTOS on Cortex-M), the core supplies weak defaults (timestamp 0, no lock, one guard flag). Override any of them in your application sources. An override placed in a static library may be ignored by the linker, so keep it in an application source file.
 - A multi-threaded port must override `log_lock`, `log_unlock`, `log_guard_enter` and `log_guard_exit`. The guard must be per thread.
 
 ## Output Format
@@ -603,7 +614,12 @@ Define these as compiler flags, so that the library sources and your code see th
 #define LOGGING_STM32_FREERTOS
 #define LOGGING_STM32_BARE_METAL
 
-// STM32 FreeRTOS: tasks that may be inside the library at once (default: 8)
+// FreeRTOS on Cortex-M without a vendor port: state that FreeRTOS is present
+// (compilers without __has_include), or keep the core defaults instead
+#define LOGGING_FREERTOS
+#define LOGGING_FREERTOS_DISABLE
+
+// STM32 FreeRTOS and FreeRTOS Cortex-M: tasks that may be inside the library at once (default: 8)
 #define LOGGING_MAX_TASKS 8
 
 // Wall clock for the date/time formats (default: 1 on POSIX and ESP32, else 0)
@@ -618,12 +634,12 @@ Define these as compiler flags, so that the library sources and your code see th
 ## Thread Safety
 
 - One mutex serializes every log call: timestamp, formatting and all driver writes. The message buffer is one static buffer used only while the mutex is held.
-- On ESP32 and STM32 with FreeRTOS, call `log_platform_init()` (or `Log.begin()`) before other tasks log. Until then there is no mutex, and concurrent calls can mix their text in the shared buffer (never beyond its end).
+- On ESP32, STM32 with FreeRTOS and FreeRTOS Cortex-M, call `log_platform_init()` (or `Log.begin()`) before other tasks log. Until then there is no mutex, and concurrent calls can mix their text in the shared buffer (never beyond its end).
 - A call waits up to `LOGGING_LOCK_TIMEOUT_MS` for the mutex. On timeout it proceeds without the lock (prevents deadlocks), formatting into a small stack buffer (`LOGGING_UNLOCKED_BUFFER_SIZE`, 128 bytes), so a long message is cut. Its output may then interleave with another call.
 - While `log_init()` or `log_deinit()` runs, a call that times out is dropped instead.
-- The recursion guard is per thread (POSIX, ESP32) or per task (STM32 FreeRTOS). A log call made from inside a driver or formatter is dropped.
-- On STM32 with FreeRTOS, at most `LOGGING_MAX_TASKS` tasks can be inside the library at once (logging or waiting). A call beyond that is dropped.
-- Log calls from interrupt handlers are dropped on STM32 FreeRTOS and ESP32. On STM32 bare metal they are allowed, and dropped while the main loop is inside a log call.
+- The recursion guard is per thread (POSIX, ESP32) or per task (STM32 FreeRTOS, FreeRTOS Cortex-M). A log call made from inside a driver or formatter is dropped.
+- On STM32 with FreeRTOS and on FreeRTOS Cortex-M, at most `LOGGING_MAX_TASKS` tasks can be inside the library at once (logging or waiting for the lock). A call beyond that is dropped. The table counts tasks inside at the same moment, not tasks that ever log.
+- Log calls from interrupt handlers are dropped on STM32 FreeRTOS, FreeRTOS Cortex-M and ESP32. On STM32 bare metal they are allowed, and dropped while the main loop is inside a log call.
 
 ## Error Handling
 
@@ -639,8 +655,8 @@ The framework is designed to be fail-safe:
 
 ```bash
 tests/host/run.sh                                   # Linux host tests (gcc, AddressSanitizer)
-FREERTOS_KERNEL=<FreeRTOS-Kernel> tests/stm32/run.sh          # STM32 builds with arm-none-eabi-gcc
-FREERTOS_KERNEL=<FreeRTOS-Kernel> tests/freertos_host/run.sh  # STM32 FreeRTOS port on the POSIX simulator
+FREERTOS_KERNEL=<FreeRTOS-Kernel> tests/stm32/run.sh          # Cortex-M builds with arm-none-eabi-gcc (STM32 and FreeRTOS Cortex-M ports, platform selection rules)
+FREERTOS_KERNEL=<FreeRTOS-Kernel> tests/freertos_host/run.sh  # STM32 FreeRTOS and FreeRTOS Cortex-M ports on the POSIX simulator
 tests/stack/run.sh                                  # ESP32 stack budget (PlatformIO xtensa toolchain)
 ```
 
@@ -667,11 +683,13 @@ Logging/
 |       +-- linux.c         # Linux/Unix/macOS
 |       +-- stm32.c         # STM32 (HAL + optional FreeRTOS)
 |       +-- esp32.c         # ESP32 (ESP-IDF)
+|       +-- freertos_cm.c   # FreeRTOS on Cortex-M without a vendor port
+|       +-- freertos_common.h # FreeRTOS lock and guard shared by stm32.c and freertos_cm.c
 +-- examples/
 |   +-- arduinolog_serial/  # Arduino IDE / arduino-cli sketch (ArduinoLog.h)
 |   +-- esp32_arduino/      # PlatformIO Arduino-ESP32 example
 |   +-- stm32/              # STM32 usage examples
-+-- tests/                  # Host, STM32 and FreeRTOS simulator tests
++-- tests/                  # Host, Cortex-M build and FreeRTOS simulator tests
 +-- library.json            # PlatformIO manifest
 +-- library.properties      # Arduino IDE / arduino-cli manifest
 +-- README.md

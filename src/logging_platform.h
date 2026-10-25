@@ -33,24 +33,68 @@
 #endif
 
 // *************************************************************************
+//  FreeRTOS Detection
+// *************************************************************************
+//
+// LOGGING_FREERTOS_FOUND is defined when a FreeRTOS header is on the include
+// path. Two layouts exist: "FreeRTOS.h" (STM32CubeMX, plain kernel) and
+// "freertos/FreeRTOS.h" (n-able Arduino core, ESP-IDF).
+// LOGGING_FREERTOS_INCLUDE_SUBDIR records the second spelling for the ports.
+// Define LOGGING_FREERTOS to state that FreeRTOS is present on a compiler
+// without __has_include (add LOGGING_FREERTOS_INCLUDE_SUBDIR for the second
+// layout).
+
+#if defined(__has_include)
+    #if __has_include("FreeRTOS.h")
+        #define LOGGING_FREERTOS_FOUND 1
+    #elif __has_include("freertos/FreeRTOS.h")
+        #define LOGGING_FREERTOS_FOUND 1
+        #ifndef LOGGING_FREERTOS_INCLUDE_SUBDIR
+        #define LOGGING_FREERTOS_INCLUDE_SUBDIR 1
+        #endif
+    #endif
+#endif
+#if defined(LOGGING_FREERTOS) && !defined(LOGGING_FREERTOS_FOUND)
+    #define LOGGING_FREERTOS_FOUND 1
+#endif
+
+// FreeRTOS on an M-profile Arm core (Cortex-M) without a vendor port: the
+// shipped FreeRTOS Cortex-M platform applies unless LOGGING_FREERTOS_DISABLE
+// is defined. LOGGING_FREERTOS_CM_SIM is for the test suite only: it selects
+// this platform on the FreeRTOS POSIX simulator with stubbed registers.
+
+#if !defined(LOGGING_FREERTOS_DISABLE) && defined(LOGGING_FREERTOS_FOUND)
+    #if defined(LOGGING_FREERTOS_CM_SIM)
+        #define LOGGING_FREERTOS_CM_AVAILABLE 1
+    #elif defined(__ARM_ARCH_PROFILE) && (__ARM_ARCH_PROFILE == 'M')
+        #define LOGGING_FREERTOS_CM_AVAILABLE 1
+    #endif
+#endif
+
+// *************************************************************************
 //  Port Selection
 // *************************************************************************
 //
 // Exactly one of the LOGGING_PLATFORM_* macros below is defined as 1.
 //
-// A shipped port (STM32, ESP32, POSIX) defines every platform hook as a
-// strong symbol and the core defines none. With LOGGING_PLATFORM_GENERIC the
-// core supplies weak defaults that application code may override one by one.
-// Define LOGGING_CUSTOM_PLATFORM to disable the shipped ports.
+// A shipped port (STM32, ESP32, POSIX, FreeRTOS Cortex-M) defines every
+// platform hook as a strong symbol and the core defines none. With
+// LOGGING_PLATFORM_GENERIC the core supplies weak defaults that application
+// code may override one by one. Define LOGGING_CUSTOM_PLATFORM to disable
+// the shipped ports.
 
 #if defined(LOGGING_CUSTOM_PLATFORM)
     #define LOGGING_PLATFORM_GENERIC 1
+#elif defined(LOGGING_FREERTOS_CM_SIM)
+    #define LOGGING_PLATFORM_FREERTOS_CM 1
 #elif defined(LOGGING_TARGET_STM32)
     #define LOGGING_PLATFORM_STM32 1
 #elif defined(LOGGING_TARGET_ESP32)
     #define LOGGING_PLATFORM_ESP32 1
 #elif defined(LOGGING_TARGET_POSIX)
     #define LOGGING_PLATFORM_POSIX 1
+#elif defined(LOGGING_FREERTOS_CM_AVAILABLE)
+    #define LOGGING_PLATFORM_FREERTOS_CM 1
 #else
     #define LOGGING_PLATFORM_GENERIC 1
 #endif
@@ -60,12 +104,8 @@
 // *************************************************************************
 
 #if defined(LOGGING_PLATFORM_STM32) && !defined(LOGGING_STM32_BARE_METAL)
-    #if defined(USE_FREERTOS) || defined(LOGGING_STM32_FREERTOS)
+    #if defined(USE_FREERTOS) || defined(LOGGING_STM32_FREERTOS) || defined(LOGGING_FREERTOS_FOUND)
         #define LOGGING_STM32_USE_FREERTOS 1
-    #elif defined(__has_include)
-        #if __has_include("FreeRTOS.h")
-            #define LOGGING_STM32_USE_FREERTOS 1
-        #endif
     #endif
 #endif
 

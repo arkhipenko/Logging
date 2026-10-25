@@ -1,7 +1,8 @@
 /**
   ******************************************************************************
   * @file           : test_freertos_guard.c
-  * @brief          : STM32 FreeRTOS port (lock and per-task recursion guard)
+  * @brief          : FreeRTOS lock and per-task recursion guard (STM32 port,
+  *                   or the FreeRTOS Cortex-M port with LOGGING_FREERTOS_CM_SIM)
   *                   running on the FreeRTOS POSIX simulator
   * @note           : Several tasks log at once while the driver blocks, so
   *                   tasks queue inside the library. No line may be lost.
@@ -32,6 +33,12 @@ static __thread uint32_t g_masked;
 uint32_t stub_irq_state(void) { return g_masked; }
 void stub_irq_disable(void) { vPortDisableInterrupts(); g_masked = 1; }
 void stub_irq_restore(uint32_t state) { g_masked = state; if (!state) { vPortEnableInterrupts(); } }
+#if defined(LOGGING_FREERTOS_CM_SIM)
+// Register accessors of the FreeRTOS Cortex-M port on the simulator
+uint32_t log_cm_sim_irq_state(void) { return stub_irq_state(); }
+void log_cm_sim_irq_disable(void) { stub_irq_disable(); }
+void log_cm_sim_irq_restore(uint32_t state) { stub_irq_restore(state); }
+#endif
 
 static StaticTask_t idle_tcb;
 static StackType_t idle_stack[configMINIMAL_STACK_SIZE];

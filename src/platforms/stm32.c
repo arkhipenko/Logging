@@ -57,24 +57,13 @@
 // *************************************************************************
 
 #if defined(LOGGING_STM32_USE_FREERTOS)
-#include "FreeRTOS.h"
-#include "semphr.h"
-#include "task.h"
-
-// Maximum number of tasks inside the logging library at the same time
-// (logging, or waiting for the lock). A call beyond this limit is dropped.
-#ifndef LOGGING_MAX_TASKS
-#define LOGGING_MAX_TASKS 8
-#endif
-
-static SemaphoreHandle_t log_mutex_handle = NULL;
-#if (configSUPPORT_STATIC_ALLOCATION == 1)
-static StaticSemaphore_t log_mutex_buffer;
-#endif
-
-// Recursion guard: tasks currently inside the logging library
-static TaskHandle_t log_guard_task[LOGGING_MAX_TASKS];
-static bool log_guard_used[LOGGING_MAX_TASKS];
+// The lock and the per-task guard live in freertos_common.h (shared with the
+// FreeRTOS Cortex-M platform). The CMSIS intrinsics supply the registers.
+#define LOG_CM_IN_ISR()         (__get_IPSR() != 0U)
+#define LOG_CM_IRQ_SAVE()       __get_PRIMASK()
+#define LOG_CM_IRQ_DISABLE()    __disable_irq()
+#define LOG_CM_IRQ_RESTORE(x)   __set_PRIMASK(x)
+#include "freertos_common.h"
 
 /**
  * @brief Initialize the logging mutex (call from application startup)
@@ -82,100 +71,43 @@ static bool log_guard_used[LOGGING_MAX_TASKS];
  * Call once, before the tasks that log are started.
  */
 void log_platform_init(void) {
-    if (log_mutex_handle == NULL) {
-#if (configSUPPORT_STATIC_ALLOCATION == 1)
-        log_mutex_handle = xSemaphoreCreateMutexStatic(&log_mutex_buffer);
-#else
-        log_mutex_handle = xSemaphoreCreateMutex();
-#endif
-    }
+    log_freertos_init();
 }
 
 /**
  * @brief Delete the logging mutex
  */
 void log_platform_deinit(void) {
-    if (log_mutex_handle != NULL) {
-        vSemaphoreDelete(log_mutex_handle);
-        log_mutex_handle = NULL;
-    }
+    log_freertos_deinit();
 }
 
 /**
  * @brief Acquire logging lock with timeout (FreeRTOS implementation)
- *
- * @param timeout_ms Timeout in milliseconds
- * @return true if lock acquired, false on timeout
  */
 bool log_lock(unsigned int timeout_ms) {
-    if (log_mutex_handle == NULL) {
-        return true;  // No mutex initialized, proceed without lock
-    }
-    return xSemaphoreTake(log_mutex_handle, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
+    return log_freertos_lock(timeout_ms);
 }
 
 /**
  * @brief Release logging lock (FreeRTOS implementation)
  */
 void log_unlock(void) {
-    if (log_mutex_handle != NULL) {
-        xSemaphoreGive(log_mutex_handle);
-    }
+    log_freertos_unlock();
 }
 
 /**
- * @brief Enter the logging library on this task
- *
- * Calls from interrupt context are refused: the mutex is not ISR safe.
- * The task table is protected by masking interrupts (PRIMASK), which also
- * works before the scheduler starts.
- *
- * @return false if this task is already inside, in an ISR, or the table is full
+ * @brief Enter the logging library on this task (false in an ISR, when
+ *        already inside, or when LOGGING_MAX_TASKS tasks are inside)
  */
 bool log_guard_enter(void) {
-    if (__get_IPSR() != 0U) {
-        return false;
-    }
-
-    TaskHandle_t self = xTaskGetCurrentTaskHandle();
-    int free_slot = -1;
-
-    uint32_t primask = __get_PRIMASK();
-    __disable_irq();
-    for (int i = 0; i < LOGGING_MAX_TASKS; i++) {
-        if (log_guard_used[i]) {
-            if (log_guard_task[i] == self) {
-                __set_PRIMASK(primask);
-                return false;
-            }
-        } else if (free_slot < 0) {
-            free_slot = i;
-        }
-    }
-    if (free_slot >= 0) {
-        log_guard_used[free_slot] = true;
-        log_guard_task[free_slot] = self;
-    }
-    __set_PRIMASK(primask);
-
-    return free_slot >= 0;
+    return log_freertos_guard_enter();
 }
 
 /**
  * @brief Leave the logging library on this task
  */
 void log_guard_exit(void) {
-    TaskHandle_t self = xTaskGetCurrentTaskHandle();
-
-    uint32_t primask = __get_PRIMASK();
-    __disable_irq();
-    for (int i = 0; i < LOGGING_MAX_TASKS; i++) {
-        if (log_guard_used[i] && log_guard_task[i] == self) {
-            log_guard_used[i] = false;
-            break;
-        }
-    }
-    __set_PRIMASK(primask);
+    log_freertos_guard_exit();
 }
 
 #else
