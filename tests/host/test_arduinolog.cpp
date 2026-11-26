@@ -80,7 +80,7 @@ int main() {
     Log.notice("p=%.1F" CR, 3.14159f);               check(cap.take(), "PFX N: p=3.1\n", "%.1F");
     Log.notice("ok=%t" CR, true);                    check(cap.take(), "PFX N: ok=T\n", "%t");
 
-    // ArduinoLog specifiers as used in smartcuffs
+    // ArduinoLog specifiers as used in application code
     Log.notice("param %S saved (%F). rc = %d" CR, String("KEY"), 1.5f, 0);
     check(cap.take(), "PFX N: param KEY saved (1.50). rc = 0\n", "%S %F %d");
     Log.notice("heap = %l" CR, 123456L);             check(cap.take(), "PFX N: heap = 123456\n", "%l");
